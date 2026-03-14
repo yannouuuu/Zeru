@@ -21,7 +21,3 @@ Client iOS non-officiel pour [Izly](https://www.izly.fr), le portefeuille élect
 ## Disclaimer
 
 Ce projet est indépendant et n'est pas affilié à Izly ou S-money. Utilisation à vos propres risques.
-
-## Licence
-
-[MIT](LICENSE)
