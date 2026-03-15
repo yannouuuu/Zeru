@@ -21,11 +21,9 @@ enum OTPService {
         //    En regardant le code pack.ts, packBigEndian retourne une string
         //    dont les char codes sont les bytes big-endian du counter
         let packed = packBigEndian(counter)
-        print("🔑 OTP — packed: \(packed.debugDescription), bytes: \(Array(packed.utf8))")
 
         // 2. Décoder le seed depuis base64
         guard let seedData = Data(base64Encoded: seed) else {
-            print("❌ OTP — seed decode failed")
             return nil
         }
 
@@ -42,7 +40,6 @@ enum OTPService {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
 
-        print("🔑 OTP — result: \(base64url)")
         return base64url
     }
 

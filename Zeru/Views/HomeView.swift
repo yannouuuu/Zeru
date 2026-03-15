@@ -446,14 +446,3 @@ enum TransactionFilter: String, CaseIterable {
         }
     }
 }
-
-// ── Extension ──────────────────────────────────────────
-extension Double {
-    var euroFormatted: String {
-        let fmt          = NumberFormatter()
-        fmt.numberStyle  = .currency
-        fmt.currencyCode = "EUR"
-        fmt.locale       = Locale(identifier: "fr_FR")
-        return fmt.string(from: NSNumber(value: self)) ?? "\(self) €"
-    }
-}

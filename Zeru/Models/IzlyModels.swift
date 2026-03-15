@@ -56,3 +56,14 @@ enum IzlyError: Error {
     case parseError
     case unknown
 }
+
+// MARK: - Formatage monétaire (partagé dans tout le module)
+extension Double {
+    var euroFormatted: String {
+        let fmt          = NumberFormatter()
+        fmt.numberStyle  = .currency
+        fmt.currencyCode = "EUR"
+        fmt.locale       = Locale(identifier: "fr_FR")
+        return fmt.string(from: NSNumber(value: self)) ?? "\(self) €"
+    }
+}

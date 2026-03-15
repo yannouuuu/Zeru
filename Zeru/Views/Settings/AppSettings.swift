@@ -29,12 +29,35 @@ final class AppSettings {
         }
     }
 
+    // ── Notifications ─────────────────────────────────
+    var notifyPayments: Bool {
+        didSet { UserDefaults.standard.set(notifyPayments, forKey: "notif.payments") }
+    }
+    var notifyRecharges: Bool {
+        didSet { UserDefaults.standard.set(notifyRecharges, forKey: "notif.recharges") }
+    }
+    var notifyTransfers: Bool {
+        didSet { UserDefaults.standard.set(notifyTransfers, forKey: "notif.transfers") }
+    }
+    var notifyLowBalance: Bool {
+        didSet { UserDefaults.standard.set(notifyLowBalance, forKey: "notif.lowBalance") }
+    }
+    var lowBalanceThreshold: Double {
+        didSet { UserDefaults.standard.set(lowBalanceThreshold, forKey: "notif.lowBalanceThreshold") }
+    }
+
     // ── Init : on charge depuis UserDefaults ──────────
     init() {
-        // ?? = opérateur nil-coalescing : valeur par défaut si nil
         self.accentColorName  = UserDefaults.standard.string(forKey: "accentColorName") ?? "blue"
         let raw               = UserDefaults.standard.string(forKey: "appearanceMode") ?? "auto"
         self.appearanceMode   = AppearanceMode(rawValue: raw) ?? .auto
+
+        // Notifications — activées par défaut (object(forKey:) renvoie nil si absent → ?? true)
+        self.notifyPayments       = UserDefaults.standard.object(forKey: "notif.payments")              as? Bool   ?? true
+        self.notifyRecharges      = UserDefaults.standard.object(forKey: "notif.recharges")             as? Bool   ?? true
+        self.notifyTransfers      = UserDefaults.standard.object(forKey: "notif.transfers")             as? Bool   ?? true
+        self.notifyLowBalance     = UserDefaults.standard.object(forKey: "notif.lowBalance")            as? Bool   ?? true
+        self.lowBalanceThreshold  = UserDefaults.standard.object(forKey: "notif.lowBalanceThreshold")  as? Double ?? 2.0
     }
 
     // ── Couleur résolue ───────────────────────────────

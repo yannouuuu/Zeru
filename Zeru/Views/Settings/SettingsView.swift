@@ -6,11 +6,13 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 struct SettingsView: View {
     @ObservedObject var authVM: AuthViewModel
     @Environment(AppSettings.self) private var settings
     @State private var showDonation = false
+    @State private var notifStatus: UNAuthorizationStatus = .notDetermined
 
     var body: some View {
         NavigationStack {
@@ -67,9 +69,21 @@ struct SettingsView: View {
 
                 // ── Compte ─────────────────────────────────
                 Section("Compte") {
-                    Label("Notifications", systemImage: "bell")
-                    Label("Sécurité", systemImage: "lock.shield")
-                    Label("Confidentialité", systemImage: "hand.raised")
+                    NavigationLink {
+                        NotificationsSettingsView()
+                    } label: {
+                        HStack {
+                            Label("Notifications", systemImage: "bell.badge")
+                            Spacer()
+                            NotificationStatusBadge(status: notifStatus)
+                        }
+                    }
+
+                    NavigationLink {
+                        PrivacySettingsView()
+                    } label: {
+                        Label("Confidentialité & permissions", systemImage: "hand.raised.fill")
+                    }
                 }
 
                 // ── Donation ───────────────────────────────────────────
@@ -100,7 +114,7 @@ struct SettingsView: View {
                             .fill(Color.orange.opacity(0.25))
                     )
                 }
-                
+
                 // ── Application ────────────────────────────
                 Section("Application") {
                     HStack {
@@ -118,7 +132,7 @@ struct SettingsView: View {
                         Label("Contacter le support", systemImage: "envelope")
                     }
                 }
-                
+
                 // ── Déconnexion ────────────────────────────
                 Section {
                     Button(role: .destructive) {
@@ -132,6 +146,10 @@ struct SettingsView: View {
             .sheet(isPresented: $showDonation) {
                 DonationView()
             }
+            .task { notifStatus = await NotificationService.shared.authorizationStatus() }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                Task { notifStatus = await NotificationService.shared.authorizationStatus() }
+            }
         }
     }
 
@@ -139,6 +157,38 @@ struct SettingsView: View {
         let f = authVM.profile?.firstName.prefix(1) ?? ""
         let l = authVM.profile?.lastName.prefix(1) ?? ""
         return "\(f)\(l)".uppercased()
+    }
+}
+
+// MARK: - Badge statut notifications
+
+struct NotificationStatusBadge: View {
+    let status: UNAuthorizationStatus
+
+    var body: some View {
+        Text(label)
+            .font(.caption2)
+            .fontWeight(.semibold)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.15), in: Capsule())
+            .foregroundStyle(color)
+    }
+
+    private var label: String {
+        switch status {
+        case .authorized, .provisional: return "Actives"
+        case .denied:                   return "Bloquées"
+        default:                        return "Non configurées"
+        }
+    }
+
+    private var color: Color {
+        switch status {
+        case .authorized, .provisional: return .green
+        case .denied:                   return .red
+        default:                        return .secondary
+        }
     }
 }
 

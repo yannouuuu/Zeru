@@ -7,5 +7,7 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Zeru utilise ta position pour trouver le restaurant universitaire le plus proche.</string>
 </dict>
 </plist>

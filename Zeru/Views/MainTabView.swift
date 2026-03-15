@@ -9,7 +9,6 @@ import SwiftUI
 
 struct MainTabView: View {
     @ObservedObject var authVM: AuthViewModel
-    @State private var showPaySheet = false
 
     var body: some View {
         TabView {
@@ -21,14 +20,16 @@ struct MainTabView: View {
                 RechargeView()
             }
 
+            Tab("Menu RU", systemImage: "fork.knife") {
+                MenuRUView()
+            }
+
             Tab("Paramètres", systemImage: "gearshape.fill") {
                 SettingsView(authVM: authVM)
             }
 
-            // Le rôle .search place un bouton dans la toolbar native
-            // On le détourne pour ouvrir le QR code
             Tab("Payer", systemImage: "qrcode", role: .search) {
-                PaySheetView(authVM: authVM, isPresented: $showPaySheet)
+                PaySheetView(authVM: authVM)
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)

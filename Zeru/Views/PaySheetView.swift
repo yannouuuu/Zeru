@@ -10,10 +10,10 @@ import SwiftUI
 struct PaySheetView: View {
     @ObservedObject var authVM: AuthViewModel
     @StateObject private var payVM = PayViewModel()
-    @Binding var isPresented: Bool
     @Namespace private var namespace
 
     private let haptic = UINotificationFeedbackGenerator()
+    @State private var previousBrightness: CGFloat = UIScreen.main.brightness
 
     var body: some View {
         ZStack {
@@ -25,26 +25,14 @@ struct PaySheetView: View {
             VStack(spacing: 32) {
 
                 // ── Header ─────────────────────────────
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Payer")
-                            .font(.largeTitle.bold())
-                        Text("Fais scanner ce QR code")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button {
-                        payVM.stopTimer()
-                        isPresented = false
-                    } label: {
-                        Image(systemName: "xmark")
-                            .fontWeight(.semibold)
-                            .frame(width: 32, height: 32)
-                            .glassEffect(.regular, in: .circle)
-                    }
-                    .buttonStyle(.plain)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Payer")
+                        .font(.largeTitle.bold())
+                    Text("Fais scanner ce QR code")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 28)
                 .padding(.top, 28)
 
@@ -142,12 +130,18 @@ struct PaySheetView: View {
         }
         .onAppear {
             haptic.prepare()
+            previousBrightness = UIScreen.main.brightness
+            UIScreen.main.brightness = 1.0
             if let identification = authVM.identification {
                 payVM.setup(
                     identification: identification,
                     seed: identification.seed
                 )
             }
+        }
+        .onDisappear {
+            payVM.stopTimer()
+            UIScreen.main.brightness = previousBrightness
         }
         .onChange(of: payVM.counter) { _, _ in
             haptic.notificationOccurred(.success)

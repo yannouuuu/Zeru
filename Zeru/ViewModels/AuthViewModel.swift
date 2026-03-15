@@ -91,6 +91,9 @@ class AuthViewModel: ObservableObject {
                 pendingPassword = nil
             }
 
+            // Demande la permission de notifier au bon moment (juste après le premier login)
+            await NotificationService.shared.requestAuthorizationIfNeeded()
+
         } catch IzlyError.networkError(let msg) {
             errorMessage = msg
         } catch {
@@ -126,11 +129,13 @@ class AuthViewModel: ObservableObject {
     }
 
     private func fetchAll(identification: IzlyIdentification) async throws {
+        let isInitialLoad = transactions.isEmpty
+
         async let balanceFetch   = service.fetchBalance(identification: identification)
         async let paymentsFetch  = service.fetchOperations(identification: identification, group: 0)
         async let topupFetch     = service.fetchOperations(identification: identification, group: 1)
         async let transfersFetch = service.fetchOperations(identification: identification, group: 2)
-        
+
         let (newBalance, payments, topup, transfers) = try await (
             balanceFetch,
             paymentsFetch,
@@ -140,6 +145,14 @@ class AuthViewModel: ObservableObject {
 
         balance      = newBalance
         transactions = (payments + topup + transfers).sorted { $0.timestamp > $1.timestamp }
+
+        // Notifications : on passe isInitialLoad=true lors du premier chargement
+        // pour enregistrer les IDs sans spammer l'utilisateur avec des anciennes transactions.
+        await NotificationService.shared.processNewTransactions(
+            transactions,
+            balance: newBalance,
+            isInitialLoad: isInitialLoad
+        )
     }
 
     // MARK: - Déconnexion
