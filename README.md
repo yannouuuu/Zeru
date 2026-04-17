@@ -1,5 +1,3 @@
-# Zeru
-
 <p align="center">
 	<img src=".github/assets/zerubanner.png" alt="Banniere Zeru" />
 </p>
