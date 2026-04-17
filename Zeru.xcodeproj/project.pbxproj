@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AADD1ADF2F92F3B6004F0302 /* UIOnboarding in Frameworks */ = {isa = PBXBuildFile; productRef = AADD1ADE2F92F3B6004F0302 /* UIOnboarding */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		AA310A242F64DCD600FAA9A8 /* Zeru.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Zeru.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -36,6 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AADD1ADF2F92F3B6004F0302 /* UIOnboarding in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +83,7 @@
 			);
 			name = Zeru;
 			packageProductDependencies = (
+				AADD1ADE2F92F3B6004F0302 /* UIOnboarding */,
 			);
 			productName = Zeru;
 			productReference = AA310A242F64DCD600FAA9A8 /* Zeru.app */;
@@ -107,6 +113,9 @@
 			);
 			mainGroup = AA310A1B2F64DCD600FAA9A8;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AADD1ADD2F92F3B6004F0302 /* XCRemoteSwiftPackageReference "UIOnboarding" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AA310A252F64DCD600FAA9A8 /* Products */;
 			projectDirPath = "";
@@ -351,6 +360,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AADD1ADD2F92F3B6004F0302 /* XCRemoteSwiftPackageReference "UIOnboarding" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/lascic/UIOnboarding";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.5;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AADD1ADE2F92F3B6004F0302 /* UIOnboarding */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AADD1ADD2F92F3B6004F0302 /* XCRemoteSwiftPackageReference "UIOnboarding" */;
+			productName = UIOnboarding;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AA310A1C2F64DCD600FAA9A8 /* Project object */;
 }
