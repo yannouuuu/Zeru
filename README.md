@@ -1,6 +1,12 @@
 # Zeru
 
-Client iOS non-officiel pour [Izly](https://www.izly.fr), le portefeuille électronique étudiant français.
+<p align="center">
+	<img src=".github/assets/zerubanner.png" alt="Banniere Zeru" />
+</p>
+
+<p align="center">
+	Client iOS non-officiel pour <a href="https://www.izly.fr">Izly</a>, le portefeuille électronique étudiant français.
+</p>
 
 ## Fonctionnalités
 
