@@ -12,6 +12,8 @@ struct ActivationView: View {
     @State private var activationURL = ""
     @Namespace private var namespace
 
+    private var normalizedActivationURL: String { activationURL.trimmed }
+
     var body: some View {
         ZStack {
             Rectangle()
@@ -74,7 +76,7 @@ struct ActivationView: View {
                     }
 
                     Button {
-                        Task { await authVM.tokenize(activationURL: activationURL) }
+                        Task { await authVM.tokenize(activationURL: normalizedActivationURL) }
                     } label: {
                         Group {
                             if authVM.isLoading {
@@ -88,7 +90,7 @@ struct ActivationView: View {
                         .padding(.vertical, 16)
                     }
                     .buttonStyle(.glassProminent)
-                    .disabled(authVM.isLoading || activationURL.isEmpty)
+                    .disabled(authVM.isLoading || normalizedActivationURL.isEmpty)
 
                     Button {
                         authVM.step = .login

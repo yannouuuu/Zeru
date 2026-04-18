@@ -48,12 +48,14 @@ class AuthViewModel: ObservableObject {
 
     // MARK: - Étape 1 : Login
     func login(identifier: String, password: String) async {
+        let normalizedIdentifier = identifier.trimmed
+
         isLoading    = true
         errorMessage = nil
         pendingPassword = password
 
         do {
-            _ = try await service.login(identifier: identifier, password: password)
+            _ = try await service.login(identifier: normalizedIdentifier, password: password)
             step = .activation
         } catch IzlyError.networkError(let msg) {
             errorMessage = msg
@@ -66,15 +68,17 @@ class AuthViewModel: ObservableObject {
 
     // MARK: - Étape 2 : Tokenize
     func tokenize(activationURL: String) async {
+        let normalizedActivationURL = activationURL.trimmed
+
         isLoading    = true
         errorMessage = nil
 
         do {
             let finalURL: String
-            if activationURL.hasPrefix("https://") {
-                finalURL = try await service.extractActivationURL(from: activationURL)
+            if normalizedActivationURL.hasPrefix("https://") {
+                finalURL = try await service.extractActivationURL(from: normalizedActivationURL)
             } else {
-                finalURL = activationURL
+                finalURL = normalizedActivationURL
             }
 
             let result     = try await service.tokenize(activationURL: finalURL)

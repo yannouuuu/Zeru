@@ -40,7 +40,7 @@ struct TokenizeResult {
 }
 
 // MARK: - Transaction
-struct IzlyTransaction: Codable, Identifiable {
+struct IzlyTransaction: Codable, Identifiable, Equatable {
     let id:     String
     let date:   String
     let label:  String
@@ -55,15 +55,4 @@ enum IzlyError: Error {
     case networkError(String)
     case parseError
     case unknown
-}
-
-// MARK: - Formatage monétaire (partagé dans tout le module)
-extension Double {
-    var euroFormatted: String {
-        let fmt          = NumberFormatter()
-        fmt.numberStyle  = .currency
-        fmt.currencyCode = "EUR"
-        fmt.locale       = Locale(identifier: "fr_FR")
-        return fmt.string(from: NSNumber(value: self)) ?? "\(self) €"
-    }
 }

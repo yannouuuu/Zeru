@@ -36,7 +36,7 @@ enum CROUSService {
             guard let feedIdx = comps.firstIndex(of: "feed"),
                   feedIdx + 1 < comps.count else { return nil }
             let identifier = comps[feedIdx + 1]
-            guard !identifier.isEmpty else { return nil }
+            guard identifier.nilIfBlank != nil else { return nil }
             let name = rawName.replacingOccurrences(of: "FLUX ", with: "")
             return CrousRegion(id: identifier, name: name)
         }
@@ -192,7 +192,7 @@ private class CROUSMenuXMLParser: NSObject, XMLParserDelegate {
         switch elementName {
         case "nom" where inTargetMenu && inPlat:
             inPlatNom = false
-            let trimmed = currentDishBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = currentDishBuffer.trimmed
             if !trimmed.isEmpty {
                 currentDishes.append(trimmed)
             }

@@ -14,6 +14,9 @@ struct LoginView: View {
     @State private var isPasswordVisible = false
     @Namespace private var namespace
 
+    private var normalizedUsername: String { username.trimmed }
+    private var normalizedPassword: String { password.trimmed }
+
     var body: some View {
         ZStack {
             Rectangle()
@@ -82,14 +85,18 @@ struct LoginView: View {
                                     .textInputAutocapitalization(.never)
                                     .submitLabel(.go)
                                     .onSubmit {
-                                        Task { await authVM.login(identifier: username, password: password) }
+                                        Task {
+                                            await authVM.login(identifier: normalizedUsername, password: normalizedPassword)
+                                        }
                                     }
                             } else {
                                 SecureField("Mot de passe", text: $password)
                                     .textContentType(.password)
                                     .submitLabel(.go)
                                     .onSubmit {
-                                        Task { await authVM.login(identifier: username, password: password) }
+                                        Task {
+                                            await authVM.login(identifier: normalizedUsername, password: normalizedPassword)
+                                        }
                                     }
                             }
 
@@ -126,7 +133,9 @@ struct LoginView: View {
 
                 // ── Bouton connexion ──────────────────────
                 Button {
-                    Task { await authVM.login(identifier: username, password: password) }
+                    Task {
+                        await authVM.login(identifier: normalizedUsername, password: normalizedPassword)
+                    }
                 } label: {
                     Group {
                         if authVM.isLoading {
@@ -141,7 +150,7 @@ struct LoginView: View {
                     .padding(.vertical, 16)
                 }
                 .buttonStyle(.glassProminent)
-                .disabled(authVM.isLoading || username.isEmpty || password.isEmpty)
+                .disabled(authVM.isLoading || normalizedUsername.isEmpty || normalizedPassword.isEmpty)
                 .padding(.horizontal, 24)
                 .padding(.top, 16)
 

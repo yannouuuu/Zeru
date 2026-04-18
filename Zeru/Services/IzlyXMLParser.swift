@@ -43,7 +43,7 @@ class IzlyXMLParser: NSObject, XMLParserDelegate {
                 namespaceURI: String?,
                 qualifiedName qName: String?) {
         if let key = currentKey {
-            results[key] = currentValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            results[key] = currentValue.trimmed
         }
         currentKey = nil
     }

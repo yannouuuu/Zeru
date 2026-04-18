@@ -13,13 +13,13 @@ struct HomeView: View {
     @Namespace private var namespace
     @State private var selectedPeriod: Period = .week
     @State private var showProfile = false
-    
+
     private var initials: String {
         let f = authVM.profile?.firstName.prefix(1) ?? "?"
         let l = authVM.profile?.lastName.prefix(1) ?? ""
         return "\(f)\(l)".uppercased()
     }
-    
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -62,7 +62,6 @@ struct HomeView: View {
                 ProfileSheetView(authVM: authVM)
             }
         }
-        
         .task {
             await authVM.loadTransactions()
         }
@@ -75,14 +74,13 @@ struct BalanceChartCard: View {
     let transactions: [IzlyTransaction]
     @Binding var selectedPeriod: Period
     @State private var selectedPoint: BalancePoint? = nil
+    @State private var cachedLineData: [BalancePoint] = []
     private let haptic = UIImpactFeedbackGenerator(style: .light)
 
-    var lineData: [BalancePoint] {
+    private func buildLineData() -> [BalancePoint] {
         let sorted = transactions.sorted { $0.timestamp < $1.timestamp }
         var startBalance = balance
-        for tx in sorted {
-            startBalance -= tx.amount
-        }
+        for tx in sorted { startBalance -= tx.amount }
         var running = startBalance
         var points: [BalancePoint] = [
             BalancePoint(index: 0, date: "Début", balance: running, transaction: nil)
@@ -96,15 +94,6 @@ struct BalanceChartCard: View {
                 transaction: tx
             ))
         }
-        points[points.count - 1] = BalancePoint(
-            index: points.count - 1,
-            date: "Maintenant",
-            balance: balance,
-            transaction: sorted.last.flatMap { tx in
-                points.last?.transaction
-            }
-        )
-        
         return points
     }
 
@@ -126,7 +115,7 @@ struct BalanceChartCard: View {
                         .font(.system(size: 48, weight: .bold, design: .rounded))
                         .contentTransition(.numericText())
                     if let tx = point.transaction {
-                        Text((tx.amount >= 0 ? "+" : "") + tx.amount.euroFormatted + " · " + tx.label)
+                        Text(tx.amount.signedEuroFormatted + " · " + tx.label)
                             .font(.caption)
                             .foregroundStyle(tx.amount >= 0 ? .green : .red)
                             .transition(.opacity)
@@ -141,7 +130,7 @@ struct BalanceChartCard: View {
                         .contentTransition(.numericText())
                 }
             }
-            .animation(.spring(duration: 0.2), value: selectedPoint?.index)
+            .animation(.interactiveSpring(duration: 0.1), value: selectedPoint?.index)
             .frame(maxWidth: .infinity)
             .padding(.top, 28)
             .padding(.bottom, 20)
@@ -170,74 +159,58 @@ struct BalanceChartCard: View {
             .padding(.top, 8)
 
             // ── Graphe ligne ───────────────────────────
-            GeometryReader { geo in
-                ZStack {
-                    if lineData.count >= 2 {
-                        Chart(lineData) { point in
-                            AreaMark(
-                                x: .value("Index", point.index),
-                                y: .value("Solde", point.balance)
-                            )
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [Color.accentColor.opacity(0.3), Color.accentColor.opacity(0)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .interpolationMethod(.catmullRom)
+            if cachedLineData.count >= 2 {
+                Chart(cachedLineData) { point in
+                    AreaMark(
+                        x: .value("Index", point.index),
+                        y: .value("Solde", point.balance)
+                    )
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.accentColor.opacity(0.3), .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .interpolationMethod(.catmullRom)
 
-                            LineMark(
-                                x: .value("Index", point.index),
-                                y: .value("Solde", point.balance)
-                            )
-                            .foregroundStyle(Color.accentColor)
-                            .lineStyle(StrokeStyle(lineWidth: 2.5))
-                            .interpolationMethod(.catmullRom)
-                        }
-                        .chartXAxis(.hidden)
-                        .chartYAxis(.hidden)
-                        .chartOverlay { proxy in
-                            if let selected = selectedPoint,
-                               let x = proxy.position(forX: selected.index) {
-                                Rectangle()
-                                    .fill(Color.accentColor.opacity(0.4))
-                                    .frame(width: 1.5)
-                                    .offset(x: x - geo.size.width / 2)
+                    LineMark(
+                        x: .value("Index", point.index),
+                        y: .value("Solde", point.balance)
+                    )
+                    .foregroundStyle(Color.accentColor)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                    .interpolationMethod(.catmullRom)
 
-                                if let y = proxy.position(forY: selected.balance) {
-                                    Circle()
-                                        .fill(Color.accentColor)
-                                        .frame(width: 10, height: 10)
-                                        .offset(x: x - geo.size.width / 2, y: y - geo.size.height / 2)
-                                    Circle()
-                                        .fill(.background)
-                                        .frame(width: 5, height: 5)
-                                        .offset(x: x - geo.size.width / 2, y: y - geo.size.height / 2)
-                                }
-                            }
-                        }
-                    } else {
-                        Text("Pas encore de données")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if let selected = selectedPoint, selected.index == point.index {
+                        PointMark(
+                            x: .value("Index", point.index),
+                            y: .value("Solde", point.balance)
+                        )
+                        .symbolSize(80)
+                        .foregroundStyle(Color.accentColor)
                     }
                 }
+                .chartXAxis(.hidden)
+                .chartYAxis(.hidden)
+                .frame(height: 130)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
-                            guard lineData.count >= 2 else { return }
-                            let ratio = value.location.x / geo.size.width
-                            let index = Int((ratio * CGFloat(lineData.count - 1)).rounded())
-                            let clamped = max(0, min(lineData.count - 1, index))
-                            let point = lineData[clamped]
+                            guard !cachedLineData.isEmpty else { return }
+                            let chartWidth: CGFloat = UIScreen.main.bounds.width - 40 - 32
+                            let ratio = value.location.x / chartWidth
+                            let index = Int((ratio * CGFloat(cachedLineData.count - 1)).rounded())
+                            let clamped = max(0, min(cachedLineData.count - 1, index))
+                            let point = cachedLineData[clamped]
                             if selectedPoint?.index != point.index {
                                 haptic.impactOccurred()
-                            }
-                            withAnimation(.spring(duration: 0.15)) {
-                                selectedPoint = point
+                                withAnimation(.interactiveSpring(duration: 0.1)) {
+                                    selectedPoint = point
+                                }
                             }
                         }
                         .onEnded { _ in
@@ -246,10 +219,12 @@ struct BalanceChartCard: View {
                             }
                         }
                 )
+            } else {
+                Text("Pas encore de données")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .frame(height: 130)
             }
-            .frame(height: 130)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
 
             Divider()
 
@@ -278,7 +253,13 @@ struct BalanceChartCard: View {
             .padding(.vertical, 14)
         }
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
-        .onAppear { haptic.prepare() }
+        .onAppear {
+            haptic.prepare()
+            cachedLineData = buildLineData()
+        }
+        .onChange(of: transactions) { _, _ in
+            cachedLineData = buildLineData()
+        }
     }
 }
 
@@ -296,7 +277,7 @@ struct TransactionHistorySection: View {
         case .transfer: return transactions.filter { $0.group == 1 }
         }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
 
@@ -304,7 +285,6 @@ struct TransactionHistorySection: View {
                 .font(.headline)
                 .padding(.horizontal, 20)
 
-            // ── Filtres ────────────────────────────────
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(TransactionFilter.allCases, id: \.self) { f in
@@ -338,7 +318,6 @@ struct TransactionHistorySection: View {
                 .padding(.vertical, 4)
             }
 
-            // ── Liste filtrée ──────────────────────────
             if filtered.isEmpty {
                 ContentUnavailableView(
                     "Aucune transaction",
@@ -389,7 +368,7 @@ struct TransactionRow: View {
 
             Spacer()
 
-            Text((transaction.amount >= 0 ? "+" : "") + transaction.amount.euroFormatted)
+            Text(transaction.amount.signedEuroFormatted)
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(transaction.amount >= 0 ? .green : .primary)

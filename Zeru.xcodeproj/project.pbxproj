@@ -24,11 +24,21 @@
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		AADD1AE42F9301EB004F0302 /* Exceptions for "Zeru" folder in "Copy Bundle Resources" phase from "Zeru" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = AA310A222F64DCD600FAA9A8 /* Resources */;
+			membershipExceptions = (
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA310A262F64DCD600FAA9A8 /* Zeru */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				AA310A4E2F64E54400FAA9A8 /* Exceptions for "Zeru" folder in "Zeru" target */,
+				AADD1AE42F9301EB004F0302 /* Exceptions for "Zeru" folder in "Copy Bundle Resources" phase from "Zeru" target */,
 			);
 			path = Zeru;
 			sourceTree = "<group>";

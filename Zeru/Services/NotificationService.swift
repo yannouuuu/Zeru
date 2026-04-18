@@ -78,11 +78,10 @@ final class NotificationService {
             )
         case 1: // Virements
             guard UserDefaults.standard.object(forKey: "notif.transfers") as? Bool ?? true else { return }
-            let sign = tx.amount >= 0 ? "+" : ""
             schedule(
                 id: "tx-\(tx.id)",
                 title: "Virement",
-                body: "\(sign)\(tx.amount.euroFormatted) — \(tx.label)"
+                body: "\(tx.amount.signedEuroFormatted) — \(tx.label)"
             )
         case 2: // Paiements
             guard UserDefaults.standard.object(forKey: "notif.payments") as? Bool ?? true else { return }
@@ -108,7 +107,7 @@ final class NotificationService {
         schedule(
             id: "low-balance",
             title: "Solde Izly bas",
-            body: "Il te reste \(balance.euroFormatted) — pense à recharger !"
+            body: "Il te reste \(balance.rounded2.euroFormatted) — pense à recharger !"
         )
         UserDefaults.standard.set(Date(), forKey: lastLowBalanceDateKey)
     }
