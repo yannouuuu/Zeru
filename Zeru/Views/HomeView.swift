@@ -11,7 +11,7 @@ import Charts
 struct HomeView: View {
     @ObservedObject var authVM: AuthViewModel
     @Namespace private var namespace
-    @State private var selectedPeriod: Period = .week
+    @State private var selectedPeriod: Period = .month // éviter le risque pendant les vacances de 2 semaines par exemple
     @State private var showProfile = false
 
     private var initials: String {
@@ -78,15 +78,40 @@ struct BalanceChartCard: View {
     private let haptic = UIImpactFeedbackGenerator(style: .light)
 
     private func buildLineData() -> [BalancePoint] {
-        let sorted = transactions.sorted { $0.timestamp < $1.timestamp }
-        var startBalance = balance
-        for tx in sorted { startBalance -= tx.amount }
+        // Filtre par période d'abord
+        let now = Date()
+        let cutoff: Date
+        switch selectedPeriod {
+        case .week:  cutoff = Calendar.current.date(byAdding: .day,   value: -7,   to: now)!
+        case .month: cutoff = Calendar.current.date(byAdding: .month, value: -1,   to: now)!
+        case .year:  cutoff = Calendar.current.date(byAdding: .year,  value: -1,   to: now)!
+        }
+
+        // On filtre les transactions dans la période
+        let filtered = transactions
+            .filter { Date(timeIntervalSince1970: $0.timestamp / 1000) >= cutoff }
+            .sorted { $0.timestamp < $1.timestamp }
+
+        guard !filtered.isEmpty else { return [] }
+
+        // On part du solde actuel et on remonte uniquement sur les transactions filtrées
+        // Le solde de départ = solde actuel - somme des transactions de la période
+        let periodSum = filtered.reduce(0.0) { $0 + $1.amount }
+        let startBalance = max(0, balance - periodSum)
+
         var running = startBalance
         var points: [BalancePoint] = [
-            BalancePoint(index: 0, date: "Début", balance: running, transaction: nil)
+            BalancePoint(
+                index: 0,
+                date: formatPointDate(cutoff),
+                balance: running,
+                transaction: nil
+            )
         ]
-        for (i, tx) in sorted.enumerated() {
+
+        for (i, tx) in filtered.enumerated() {
             running += tx.amount
+            running = max(0, running)  // Izly ne peut pas être négatif
             points.append(BalancePoint(
                 index: i + 1,
                 date: tx.date,
@@ -94,9 +119,24 @@ struct BalanceChartCard: View {
                 transaction: tx
             ))
         }
+
+        // Dernier point = solde réel actuel
+        points.append(BalancePoint(
+            index: points.count,
+            date: "Maintenant",
+            balance: balance,
+            transaction: nil
+        ))
+
         return points
     }
 
+    private func formatPointDate(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.locale     = Locale(identifier: "fr_FR")
+        fmt.dateFormat = "dd/MM/yyyy"
+        return fmt.string(from: date)
+    }
     var totalSpent: Double {
         transactions.filter { $0.amount < 0 }.reduce(0) { $0 + abs($1.amount) }
     }
@@ -259,6 +299,12 @@ struct BalanceChartCard: View {
         }
         .onChange(of: transactions) { _, _ in
             cachedLineData = buildLineData()
+        }
+        .onChange(of: selectedPeriod) { _, _ in
+            withAnimation(.spring(duration: 0.3)) {
+                cachedLineData = buildLineData()
+                selectedPoint  = nil
+            }
         }
     }
 }
