@@ -153,6 +153,10 @@ struct NotificationsSettingsView: View {
     // MARK: - Helpers
 
     private func refreshStatus() async {
+        let status = await NotificationService.shared.authorizationStatus()
+        if status == .notDetermined {
+            await NotificationService.shared.requestAuthorizationIfNeeded()
+        }
         authStatus = await NotificationService.shared.authorizationStatus()
     }
 
