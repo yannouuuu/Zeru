@@ -10,6 +10,7 @@ import Charts
 
 struct HomeView: View {
     @ObservedObject var authVM: AuthViewModel
+    @AppStorage("home.betaBannerDismissed") private var betaBannerDismissed = false
     @Namespace private var namespace
     @State private var selectedPeriod: Period = .month // éviter le risque pendant les vacances de 2 semaines par exemple
     @State private var showProfile = false
@@ -24,6 +25,11 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    if !betaBannerDismissed {
+                        betaBanner
+                            .padding(.horizontal, 20)
+                    }
+
                     BalanceChartCard(
                         balance: authVM.balance,
                         transactions: authVM.transactions,
@@ -66,6 +72,52 @@ struct HomeView: View {
             await authVM.loadTransactions()
         }
     }
+    
+    private var betaBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.orange)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Application en Beta")
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundStyle(Color.orange)
+                Text("Certaines fonctionnalités peuvent évoluer ou être instables.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                withAnimation(.spring(duration: 0.25)) {
+                    betaBannerDismissed = true
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.orange.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Color.orange.opacity(0.35), lineWidth: 1)
+        )
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
 }
 
 // ── Carte solde + graphe ───────────────────────────────
@@ -76,20 +128,26 @@ struct BalanceChartCard: View {
     @State private var selectedPoint: BalancePoint? = nil
     @State private var cachedLineData: [BalancePoint] = []
     private let haptic = UIImpactFeedbackGenerator(style: .light)
+    
+    private var cutoffDate: Date {
+        let now = Date()
+        switch selectedPeriod {
+        case .week:
+            return Calendar.current.date(byAdding: .day, value: -7, to: now) ?? now
+        case .month:
+            return Calendar.current.date(byAdding: .month, value: -1, to: now) ?? now
+        case .year:
+            return Calendar.current.date(byAdding: .year, value: -1, to: now) ?? now
+        }
+    }
+    
+    private var filteredTransactionsForPeriod: [IzlyTransaction] {
+        transactions.filter { Date(timeIntervalSince1970: $0.timestamp / 1000) >= cutoffDate }
+    }
 
     private func buildLineData() -> [BalancePoint] {
-        // Filtre par période d'abord
-        let now = Date()
-        let cutoff: Date
-        switch selectedPeriod {
-        case .week:  cutoff = Calendar.current.date(byAdding: .day,   value: -7,   to: now)!
-        case .month: cutoff = Calendar.current.date(byAdding: .month, value: -1,   to: now)!
-        case .year:  cutoff = Calendar.current.date(byAdding: .year,  value: -1,   to: now)!
-        }
-
         // On filtre les transactions dans la période
-        let filtered = transactions
-            .filter { Date(timeIntervalSince1970: $0.timestamp / 1000) >= cutoff }
+        let filtered = filteredTransactionsForPeriod
             .sorted { $0.timestamp < $1.timestamp }
 
         guard !filtered.isEmpty else { return [] }
@@ -103,7 +161,7 @@ struct BalanceChartCard: View {
         var points: [BalancePoint] = [
             BalancePoint(
                 index: 0,
-                date: formatPointDate(cutoff),
+                date: formatPointDate(cutoffDate),
                 balance: running,
                 transaction: nil
             )
@@ -138,7 +196,13 @@ struct BalanceChartCard: View {
         return fmt.string(from: date)
     }
     var totalSpent: Double {
-        transactions.filter { $0.amount < 0 }.reduce(0) { $0 + abs($1.amount) }
+        filteredTransactionsForPeriod
+            .filter { $0.amount < 0 }
+            .reduce(0) { $0 + abs($1.amount) }
+    }
+    
+    var transactionCountInPeriod: Int {
+        filteredTransactionsForPeriod.filter { $0.amount < 0 }.count
     }
 
     var body: some View {
@@ -284,7 +348,7 @@ struct BalanceChartCard: View {
                     Text("Transactions")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("\(transactions.filter { $0.amount < 0 }.count)")
+                    Text("\(transactionCountInPeriod)")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }

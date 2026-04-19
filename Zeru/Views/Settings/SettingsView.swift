@@ -1,10 +1,3 @@
-//
-//  SettingsView.swift
-//  Zeru
-//
-//  Created by Yann Renard on 14/03/2026.
-//
-
 import SwiftUI
 import UserNotifications
 
@@ -17,63 +10,52 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                profileSection
 
-                // ── Profil ─────────────────────────────────
-                Section {
-                    HStack(spacing: 14) {
-                        Group {
-                            if let image = authVM.profileImage {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 56, height: 56)
-                                    .clipShape(.circle)
-                            } else {
-                                Text(initials)
-                                    .font(.system(size: 22, weight: .semibold))
-                                    .frame(width: 56, height: 56)
-                                    .glassEffect(.regular, in: .circle)
-                            }
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(authVM.profile?.firstName ?? "") \(authVM.profile?.lastName ?? "")")
-                                .font(.headline)
-                            Text(authVM.profile?.email ?? "")
+                Section("Personnalisation") {
+                    NavigationLink {
+                        AppearancePickerView()
+                    } label: {
+                        HStack {
+                            Label("Thème", systemImage: settings.appearanceMode.icon)
+                            Spacer()
+                            Text(settings.appearanceMode.label)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.vertical, 6)
-                }
 
-                // ── Apparence ──────────────────────────────
-                Section("Apparence") {
                     NavigationLink {
                         AccentColorPickerView()
                     } label: {
                         HStack {
-                            Label("Couleur", systemImage: "paintpalette")
+                            Label("Couleur d'accent", systemImage: "paintpalette.fill")
                             Spacer()
                             Circle()
                                 .fill(settings.accentColor)
-                                .frame(width: 20, height: 20)
+                                .frame(width: 18, height: 18)
                         }
                     }
 
                     NavigationLink {
-                        AppearancePickerView()
+                        AppIconPickerView()
                     } label: {
-                        Label("Thème", systemImage: settings.appearanceMode.icon)
+                        HStack {
+                            Label("Icône de l'app", systemImage: "app.badge.fill")
+                            Spacer()
+                            Text(currentIcon.label)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
-                // ── Compte ─────────────────────────────────
-                Section("Compte") {
+                Section("Notifications") {
                     NavigationLink {
                         NotificationsSettingsView()
                     } label: {
                         HStack {
-                            Label("Notifications", systemImage: "bell.badge")
+                            Label("Gérer les alertes", systemImage: "bell.badge.fill")
                             Spacer()
                             NotificationStatusBadge(status: notifStatus)
                         }
@@ -86,41 +68,26 @@ struct SettingsView: View {
                     }
                 }
 
-                // ── Donation ───────────────────────────────────────────
-                Section {
+                Section("Soutien & créateur") {
+                    NavigationLink {
+                        AboutCreatorView()
+                    } label: {
+                        Label("Espace About", systemImage: "person.text.rectangle.fill")
+                    }
+
                     Button {
                         showDonation = true
                     } label: {
-                        HStack(spacing: 12) {
-                            Text("☕️")
-                                .font(.title2)
-                            Text("Soutenir Zeru")
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Text("Étudiant & solo")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.vertical, 4)
+                        Label("Soutenir Zeru", systemImage: "heart.circle.fill")
+                            .foregroundStyle(.orange)
                     }
-                    .buttonStyle(.plain)
-                    .tint(.orange)
-                    .listRowBackground(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.orange.opacity(0.25))
-                    )
                 }
 
-                // ── Application ────────────────────────────
                 Section("Application") {
                     HStack {
                         Label("Version", systemImage: "info.circle")
                         Spacer()
-                        Text("1.0.0")
+                        Text(appVersion)
                             .foregroundStyle(.secondary)
                     }
 
@@ -133,7 +100,6 @@ struct SettingsView: View {
                     }
                 }
 
-                // ── Déconnexion ────────────────────────────
                 Section {
                     Button(role: .destructive) {
                         authVM.logout()
@@ -146,10 +112,49 @@ struct SettingsView: View {
             .sheet(isPresented: $showDonation) {
                 DonationView()
             }
-            .task { notifStatus = await NotificationService.shared.authorizationStatus() }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-                Task { notifStatus = await NotificationService.shared.authorizationStatus() }
+            .task {
+                notifStatus = await NotificationService.shared.authorizationStatus()
+                settings.appIconName = AppIconService.shared.currentOption().rawValue
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                Task {
+                    notifStatus = await NotificationService.shared.authorizationStatus()
+                    settings.appIconName = AppIconService.shared.currentOption().rawValue
+                }
+            }
+        }
+    }
+
+    private var profileSection: some View {
+        Section {
+            HStack(spacing: 14) {
+                Group {
+                    if let image = authVM.profileImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 60, height: 60)
+                            .clipShape(.circle)
+                    } else {
+                        Text(initials)
+                            .font(.system(size: 22, weight: .semibold))
+                            .frame(width: 60, height: 60)
+                            .glassEffect(.regular, in: .circle)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(authVM.profile?.firstName ?? "") \(authVM.profile?.lastName ?? "")")
+                        .font(.headline)
+                    Text(authVM.profile?.email ?? "")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Label("Compte Izly connecté", systemImage: "checkmark.seal.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+            }
+            .padding(.vertical, 6)
         }
     }
 
@@ -158,9 +163,17 @@ struct SettingsView: View {
         let l = authVM.profile?.lastName.prefix(1) ?? ""
         return "\(f)\(l)".uppercased()
     }
-}
 
-// MARK: - Badge statut notifications
+    private var currentIcon: AppIconOption {
+        AppIconOption(rawValue: settings.appIconName) ?? .classic
+    }
+
+    private var appVersion: String {
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        return "\(short) (\(build))"
+    }
+}
 
 struct NotificationStatusBadge: View {
     let status: UNAuthorizationStatus
@@ -178,21 +191,20 @@ struct NotificationStatusBadge: View {
     private var label: String {
         switch status {
         case .authorized, .provisional: return "Actives"
-        case .denied:                   return "Bloquées"
-        default:                        return "Non configurées"
+        case .denied: return "Bloquées"
+        default: return "Non configurées"
         }
     }
 
     private var color: Color {
         switch status {
         case .authorized, .provisional: return .green
-        case .denied:                   return .red
-        default:                        return .secondary
+        case .denied: return .red
+        default: return .secondary
         }
     }
 }
 
-// ── Vue donation ───────────────────────────────────────
 struct DonationView: View {
     @Environment(\.dismiss) private var dismiss
     private let revolut = URL(string: "https://revolut.me/y_renard")!
@@ -201,8 +213,6 @@ struct DonationView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 32) {
-
-                    // ── Header ─────────────────────────────
                     VStack(spacing: 16) {
                         ZStack {
                             Circle()
@@ -230,7 +240,6 @@ struct DonationView: View {
                     }
                     .padding(.top, 8)
 
-                    // ── Bouton Revolut ─────────────────────
                     Link(destination: revolut) {
                         HStack(spacing: 10) {
                             Image(systemName: "heart.fill")
@@ -243,7 +252,6 @@ struct DonationView: View {
                     .buttonStyle(.glassProminent)
                     .padding(.horizontal, 20)
 
-                    // ── Message perso ──────────────────────
                     VStack(spacing: 8) {
                         Text("Merci 🫶")
                             .font(.headline)
@@ -271,23 +279,6 @@ struct DonationView: View {
                     .buttonStyle(.plain)
                 }
             }
-        }
-    }
-}
-
-// ── Pill ───────────────────────────────────────────────
-struct FeaturePill: View {
-    let icon: String
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: icon)
-                .font(.caption.bold())
-                .foregroundStyle(Color.accentColor)
-            Text(text)
-                .font(.caption)
-                .fontWeight(.medium)
         }
     }
 }

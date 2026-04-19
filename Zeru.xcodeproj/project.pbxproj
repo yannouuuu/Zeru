@@ -24,21 +24,11 @@
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
-/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-		AADD1AE42F9301EB004F0302 /* Exceptions for "Zeru" folder in "Copy Bundle Resources" phase from "Zeru" target */ = {
-			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
-			buildPhase = AA310A222F64DCD600FAA9A8 /* Resources */;
-			membershipExceptions = (
-			);
-		};
-/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA310A262F64DCD600FAA9A8 /* Zeru */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				AA310A4E2F64E54400FAA9A8 /* Exceptions for "Zeru" folder in "Zeru" target */,
-				AADD1AE42F9301EB004F0302 /* Exceptions for "Zeru" folder in "Copy Bundle Resources" phase from "Zeru" target */,
 			);
 			path = Zeru;
 			sourceTree = "<group>";
@@ -282,6 +272,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconChoco AppIconCold AppIconForest AppIconOcean AppIconSand AppIconSummer AppIconWeird";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -317,6 +308,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconChoco AppIconCold AppIconForest AppIconOcean AppIconSand AppIconSummer AppIconWeird";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;

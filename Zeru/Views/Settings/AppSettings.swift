@@ -1,35 +1,25 @@
-//
-//  AppSettings.swift
-//  Zeru
-//
-//  Created by Yann Renard on 14/03/2026.
-//
-
 import SwiftUI
 
-// "final class" = ne peut pas être hérité, légèrement plus performant
-// "@Observable" = nouveau macro iOS 17+ qui remplace ObservableObject
-// Plus besoin de @Published sur chaque var !
 @Observable
 final class AppSettings {
-
-    // ── Couleur d'accent ──────────────────────────────
-    // On stocke le nom de la couleur (String) car Color n'est pas Codable
     var accentColorName: String {
         didSet {
-            // "didSet" = appelé automatiquement après chaque modification
             UserDefaults.standard.set(accentColorName, forKey: "accentColorName")
         }
     }
 
-    // ── Apparence (clair / sombre / auto) ─────────────
     var appearanceMode: AppearanceMode {
         didSet {
             UserDefaults.standard.set(appearanceMode.rawValue, forKey: "appearanceMode")
         }
     }
 
-    // ── Notifications ─────────────────────────────────
+    var appIconName: String {
+        didSet {
+            UserDefaults.standard.set(appIconName, forKey: "appIconName")
+        }
+    }
+
     var notifyPayments: Bool {
         didSet { UserDefaults.standard.set(notifyPayments, forKey: "notif.payments") }
     }
@@ -46,75 +36,136 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(lowBalanceThreshold, forKey: "notif.lowBalanceThreshold") }
     }
 
-    // ── Init : on charge depuis UserDefaults ──────────
     init() {
-        self.accentColorName  = UserDefaults.standard.string(forKey: "accentColorName") ?? "blue"
-        let raw               = UserDefaults.standard.string(forKey: "appearanceMode") ?? "auto"
-        self.appearanceMode   = AppearanceMode(rawValue: raw) ?? .auto
+        self.accentColorName = UserDefaults.standard.string(forKey: "accentColorName") ?? "blue"
+        let raw = UserDefaults.standard.string(forKey: "appearanceMode") ?? "auto"
+        self.appearanceMode = AppearanceMode(rawValue: raw) ?? .auto
 
-        // Notifications — activées par défaut (object(forKey:) renvoie nil si absent → ?? true)
-        self.notifyPayments       = UserDefaults.standard.object(forKey: "notif.payments")              as? Bool   ?? true
-        self.notifyRecharges      = UserDefaults.standard.object(forKey: "notif.recharges")             as? Bool   ?? true
-        self.notifyTransfers      = UserDefaults.standard.object(forKey: "notif.transfers")             as? Bool   ?? true
-        self.notifyLowBalance     = UserDefaults.standard.object(forKey: "notif.lowBalance")            as? Bool   ?? true
-        self.lowBalanceThreshold  = UserDefaults.standard.object(forKey: "notif.lowBalanceThreshold")  as? Double ?? 2.0
+        self.appIconName = UserDefaults.standard.string(forKey: "appIconName") ?? AppIconOption.classic.rawValue
+
+        self.notifyPayments = UserDefaults.standard.object(forKey: "notif.payments") as? Bool ?? true
+        self.notifyRecharges = UserDefaults.standard.object(forKey: "notif.recharges") as? Bool ?? true
+        self.notifyTransfers = UserDefaults.standard.object(forKey: "notif.transfers") as? Bool ?? true
+        self.notifyLowBalance = UserDefaults.standard.object(forKey: "notif.lowBalance") as? Bool ?? true
+        self.lowBalanceThreshold = UserDefaults.standard.object(forKey: "notif.lowBalanceThreshold") as? Double ?? 2.0
     }
 
-    // ── Couleur résolue ───────────────────────────────
     var accentColor: Color {
         AccentOption.all.first { $0.name == accentColorName }?.color ?? .blue
     }
 }
 
-// ── Les modes d'apparence ──────────────────────────────
-// "RawRepresentable" via String = on peut convertir en String et inversement
 enum AppearanceMode: String, CaseIterable {
     case light = "light"
-    case dark  = "dark"
-    case auto  = "auto"
+    case dark = "dark"
+    case auto = "auto"
 
     var label: String {
         switch self {
         case .light: return "Clair"
-        case .dark:  return "Sombre"
-        case .auto:  return "Automatique"
+        case .dark: return "Sombre"
+        case .auto: return "Automatique"
         }
     }
 
     var icon: String {
         switch self {
         case .light: return "sun.max"
-        case .dark:  return "moon"
-        case .auto:  return "circle.lefthalf.filled"
+        case .dark: return "moon"
+        case .auto: return "circle.lefthalf.filled"
         }
     }
 
-    // Conversion vers le type natif SwiftUI
     var colorScheme: ColorScheme? {
         switch self {
         case .light: return .light
-        case .dark:  return .dark
-        case .auto:  return nil  // nil = laisse le système décider
+        case .dark: return .dark
+        case .auto: return nil
         }
     }
 }
 
-// ── Les couleurs disponibles ───────────────────────────
+enum AppIconOption: String, CaseIterable, Identifiable {
+    case classic
+    case choco
+    case cold
+    case forest
+    case ocean
+    case sand
+    case summer
+    case weird
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .classic: return "Classique"
+        case .choco: return "Choco"
+        case .cold: return "Cold"
+        case .forest: return "Forest"
+        case .ocean: return "Ocean"
+        case .sand: return "Sand"
+        case .summer: return "Summer"
+        case .weird: return "Weird"
+        }
+    }
+
+    var alternateIconName: String? {
+        switch self {
+        case .classic: return nil
+        case .choco: return "AppIconChoco"
+        case .cold: return "AppIconCold"
+        case .forest: return "AppIconForest"
+        case .ocean: return "AppIconOcean"
+        case .sand: return "AppIconSand"
+        case .summer: return "AppIconSummer"
+        case .weird: return "AppIconWeird"
+        }
+    }
+
+    var assetImageName: String {
+        switch self {
+        case .classic: return "AppIcon"
+        case .choco: return "AppIconChoco"
+        case .cold: return "AppIconCold"
+        case .forest: return "AppIconForest"
+        case .ocean: return "AppIconOcean"
+        case .sand: return "AppIconSand"
+        case .summer: return "AppIconSummer"
+        case .weird: return "AppIconWeird"
+        }
+    }
+
+    var previewImageName: String {
+        switch self {
+        case .classic: return "IconPreviewClassic"
+        case .choco: return "IconPreviewChoco"
+        case .cold: return "IconPreviewCold"
+        case .forest: return "IconPreviewForest"
+        case .ocean: return "IconPreviewOcean"
+        case .sand: return "IconPreviewSand"
+        case .summer: return "IconPreviewSummer"
+        case .weird: return "IconPreviewWeird"
+        }
+    }
+}
+
 struct AccentOption: Identifiable {
-    let id   = UUID()
-    let name:  String
+    let id = UUID()
+    let name: String
     let color: Color
 
     static let all: [AccentOption] = [
-        AccentOption(name: "blue",   color: .blue),
+        AccentOption(name: "blue", color: .blue),
         AccentOption(name: "indigo", color: .indigo),
         AccentOption(name: "purple", color: .purple),
-        AccentOption(name: "pink",   color: .pink),
-        AccentOption(name: "red",    color: .red),
+        AccentOption(name: "pink", color: .pink),
+        AccentOption(name: "red", color: .red),
         AccentOption(name: "orange", color: .orange),
         AccentOption(name: "yellow", color: .yellow),
-        AccentOption(name: "green",  color: .green),
-        AccentOption(name: "teal",   color: .teal),
-        AccentOption(name: "mint",   color: .mint),
+        AccentOption(name: "green", color: .green),
+        AccentOption(name: "teal", color: .teal),
+        AccentOption(name: "mint", color: .mint)
     ]
 }
+
