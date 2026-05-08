@@ -13,7 +13,7 @@ struct LoginView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var isPasswordVisible = false
-    @FocusState private var focusedField: Field?
+    @State private var focusedField: Field?
 
     private enum Field { case username, password }
 
@@ -119,11 +119,10 @@ struct LoginView: View {
                 text: $username,
                 isSecure: false,
                 focus: .username,
-                submitLabel: .next,
-                keyboardType: .emailAddress,
-                textContentType: .emailAddress
+                returnKeyType: .next,
+                usesEmailKeyboard: true,
+                onReturn: { focusedField = .password }
             )
-            .onSubmit { focusedField = .password }
 
             Divider()
                 .background(Color.white.opacity(0.08))
@@ -135,9 +134,8 @@ struct LoginView: View {
                 text: $password,
                 isSecure: !isPasswordVisible,
                 focus: .password,
-                submitLabel: .go,
-                keyboardType: .default,
-                textContentType: nil,
+                returnKeyType: .go,
+                onReturn: submit,
                 trailing: AnyView(
                     Button {
                         isPasswordVisible.toggle()
@@ -149,7 +147,6 @@ struct LoginView: View {
                     .buttonStyle(.plain)
                 )
             )
-            .onSubmit { submit() }
         }
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -169,9 +166,9 @@ struct LoginView: View {
         text: Binding<String>,
         isSecure: Bool,
         focus: Field,
-        submitLabel: SubmitLabel,
-        keyboardType: UIKeyboardType = .default,
-        textContentType: UITextContentType? = nil,
+        returnKeyType: UIReturnKeyType,
+        usesEmailKeyboard: Bool = false,
+        onReturn: @escaping () -> Void,
         trailing: AnyView? = nil
     ) -> some View {
         HStack(spacing: 12) {
@@ -180,23 +177,16 @@ struct LoginView: View {
                 .foregroundStyle(.white.opacity(0.5))
                 .frame(width: 20)
 
-            Group {
-                if isSecure {
-                    SecureField("", text: text, prompt: placeholderText(placeholder))
-                        .textContentType(.password)
-                } else {
-                    TextField("", text: text, prompt: placeholderText(placeholder))
-                        .textContentType(textContentType)
-                        .keyboardType(keyboardType)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-            }
-            .font(AppFont.body())
-            .foregroundStyle(.white)
-            .tint(.white)
-            .submitLabel(submitLabel)
-            .focused($focusedField, equals: focus)
+            LoginTextInput(
+                text: text,
+                placeholder: placeholder,
+                isSecure: isSecure,
+                isFocused: focusBinding(for: focus),
+                keyboardType: usesEmailKeyboard ? .emailAddress : .default,
+                returnKeyType: returnKeyType,
+                onReturn: onReturn
+            )
+            .frame(height: 22)
 
             if let trailing {
                 trailing
@@ -210,6 +200,15 @@ struct LoginView: View {
         Text(value)
             .font(AppFont.body())
             .foregroundStyle(.white.opacity(0.35))
+    }
+
+    private func focusBinding(for field: Field) -> Binding<Bool> {
+        Binding(
+            get: { focusedField == field },
+            set: { isFocused in
+                focusedField = isFocused ? field : (focusedField == field ? nil : focusedField)
+            }
+        )
     }
 
     // MARK: - Footer
@@ -234,6 +233,122 @@ struct LoginView: View {
         focusedField = nil
         Task {
             await authVM.login(identifier: normalizedUsername, password: normalizedPassword)
+        }
+    }
+}
+
+private struct LoginTextInput: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let isSecure: Bool
+    @Binding var isFocused: Bool
+    let keyboardType: UIKeyboardType
+    let returnKeyType: UIReturnKeyType
+    let onReturn: () -> Void
+
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField(frame: .zero)
+        textField.delegate = context.coordinator
+        textField.addTarget(context.coordinator, action: #selector(Coordinator.textDidChange(_:)), for: .editingChanged)
+
+        textField.backgroundColor = .clear
+        textField.borderStyle = .none
+        textField.textColor = .white
+        textField.tintColor = .white
+        textField.font = Self.font
+        textField.attributedPlaceholder = Self.placeholder(placeholder)
+
+        textField.keyboardAppearance = .dark
+        textField.keyboardType = keyboardType
+        textField.returnKeyType = returnKeyType
+        textField.enablesReturnKeyAutomatically = false
+        textField.isSecureTextEntry = isSecure
+
+        textField.autocorrectionType = .no
+        textField.autocapitalizationType = .none
+        textField.spellCheckingType = .no
+        textField.smartDashesType = .no
+        textField.smartQuotesType = .no
+        textField.smartInsertDeleteType = .no
+        textField.textContentType = nil
+        textField.passwordRules = nil
+
+        textField.inputAssistantItem.leadingBarButtonGroups = []
+        textField.inputAssistantItem.trailingBarButtonGroups = []
+
+        return textField
+    }
+
+    func updateUIView(_ textField: UITextField, context: Context) {
+        context.coordinator.parent = self
+
+        if textField.text != text {
+            textField.text = text
+        }
+
+        if textField.placeholder != placeholder {
+            textField.attributedPlaceholder = Self.placeholder(placeholder)
+        }
+
+        if textField.isSecureTextEntry != isSecure {
+            textField.isSecureTextEntry = isSecure
+        }
+
+        if textField.keyboardType != keyboardType {
+            textField.keyboardType = keyboardType
+        }
+
+        if textField.returnKeyType != returnKeyType {
+            textField.returnKeyType = returnKeyType
+        }
+
+        if isFocused, !textField.isFirstResponder {
+            textField.becomeFirstResponder()
+        } else if !isFocused, textField.isFirstResponder {
+            textField.resignFirstResponder()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    private static var font: UIFont {
+        UIFont(name: "Geist-Regular", size: 15) ?? .systemFont(ofSize: 15)
+    }
+
+    private static func placeholder(_ value: String) -> NSAttributedString {
+        NSAttributedString(
+            string: value,
+            attributes: [
+                .foregroundColor: UIColor.white.withAlphaComponent(0.35),
+                .font: font
+            ]
+        )
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: LoginTextInput
+
+        init(parent: LoginTextInput) {
+            self.parent = parent
+        }
+
+        @objc func textDidChange(_ textField: UITextField) {
+            parent.text = textField.text ?? ""
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            parent.isFocused = true
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            parent.isFocused = false
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            parent.onReturn()
+            return false
         }
     }
 }
