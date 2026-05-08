@@ -26,7 +26,6 @@ struct ContentView: View {
             OnboardingView {
                 showOnboarding = false
             }
-            .ignoresSafeArea()
         }
     }
 }

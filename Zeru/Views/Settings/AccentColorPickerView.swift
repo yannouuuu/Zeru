@@ -1,32 +1,13 @@
-//
-//  AccentColorPickerView.swift
-//  Zeru
-//
-//  Created by Yann Renard on 14/03/2026.
-//
-
 import SwiftUI
 
 struct AccentColorPickerView: View {
     @Environment(AppSettings.self) private var settings
 
-    // "@Bindable" = permet de créer des bindings depuis un @Observable
-    // Nécessaire car @Environment ne donne pas de binding direct
-    @Bindable private var bindableSettings: AppSettings
-
-    // Init pour initialiser bindableSettings depuis settings
-    init() {
-        // On crée un placeholder — sera remplacé par environment dans body
-        self._bindableSettings = Bindable(AppSettings())
-    }
-
     var body: some View {
-        // On utilise settings directement de l'environment
         let current = settings
 
-        return List {
+        List {
             Section {
-                // Prévisualisation en temps réel
                 HStack {
                     Spacer()
                     VStack(spacing: 12) {
@@ -46,32 +27,42 @@ struct AccentColorPickerView: View {
                 Text("Aperçu")
             }
 
-            Section("Couleur") {
-                ForEach(AccentOption.all) { option in
-                    Button {
-                        // Modification directe — didSet dans AppSettings
-                        // sauvegarde automatiquement dans UserDefaults
-                        current.accentColorName = option.name
-                    } label: {
-                        HStack(spacing: 14) {
-                            Circle()
-                                .fill(option.color)
-                                .frame(width: 28, height: 28)
+            Section {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(AccentOption.all) { option in
+                            let isSelected = current.accentColorName == option.name
+                            Button {
+                                current.accentColorName = option.name
+                            } label: {
+                                ZStack {
+                                    // Anneau de sélection visible
+                                    Circle()
+                                        .strokeBorder(option.color, lineWidth: isSelected ? 3 : 0)
+                                        .frame(width: 50, height: 50)
 
-                            Text(option.name.capitalized)
-                                .foregroundStyle(.primary)
+                                    Circle()
+                                        .fill(option.color)
+                                        .frame(width: isSelected ? 38 : 44, height: isSelected ? 38 : 44)
 
-                            Spacer()
-
-                            // Coche si sélectionné
-                            if current.accentColorName == option.name {
-                                Image(systemName: "checkmark")
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(option.color)
+                                    if isSelected {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 15, weight: .black))
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                                .frame(width: 56, height: 56)
+                                .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
                             }
+                            .buttonStyle(.plain)
                         }
                     }
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 4)
                 }
+                .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+            } header: {
+                Text("Couleur")
             }
         }
         .navigationTitle("Couleur")

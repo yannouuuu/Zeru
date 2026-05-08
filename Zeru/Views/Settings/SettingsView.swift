@@ -72,7 +72,7 @@ struct SettingsView: View {
                     NavigationLink {
                         AboutCreatorView()
                     } label: {
-                        Label("Espace About", systemImage: "person.text.rectangle.fill")
+                        Label("À propos", systemImage: "person.text.rectangle.fill")
                     }
 
                     Button {
@@ -84,19 +84,21 @@ struct SettingsView: View {
                 }
 
                 Section("Application") {
+                    NavigationLink {
+                        ChangelogView()
+                    } label: {
+                        Label("Changelogs", systemImage: "list.bullet.clipboard.fill")
+                    }
+
                     HStack {
-                        Label("Version", systemImage: "info.circle")
+                        Label("Version", systemImage: "info.circle.fill")
                         Spacer()
                         Text(appVersion)
                             .foregroundStyle(.secondary)
                     }
 
-                    Link(destination: URL(string: "https://github.com/LiterateInk/Ezly.js")!) {
-                        Label("Propulsé par Ezly.js", systemImage: "chevron.left.forwardslash.chevron.right")
-                    }
-
                     Link(destination: URL(string: "mailto:support@zeru.app")!) {
-                        Label("Contacter le support", systemImage: "envelope")
+                        Label("Contacter le support", systemImage: "envelope.fill")
                     }
                 }
 
@@ -104,7 +106,8 @@ struct SettingsView: View {
                     Button(role: .destructive) {
                         authVM.logout()
                     } label: {
-                        Label("Se déconnecter", systemImage: "rectangle.portrait.and.arrow.right")
+                        Label("Se déconnecter", systemImage: "rectangle.portrait.and.arrow.right.fill")
+                            .foregroundStyle(.red)
                     }
                 }
             }
@@ -208,6 +211,7 @@ struct NotificationStatusBadge: View {
 struct DonationView: View {
     @Environment(\.dismiss) private var dismiss
     private let revolut = URL(string: "https://revolut.me/y_renard")!
+    private let kofi    = URL(string: "https://ko-fi.com/yannrnd")!
 
     var body: some View {
         NavigationStack {
@@ -240,16 +244,30 @@ struct DonationView: View {
                     }
                     .padding(.top, 8)
 
-                    Link(destination: revolut) {
-                        HStack(spacing: 10) {
-                            Image(systemName: "heart.fill")
-                            Text("Faire un don via Revolut")
-                                .fontWeight(.semibold)
+                    VStack(spacing: 12) {
+                        Link(destination: revolut) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "heart.fill")
+                                Text("Faire un don via Revolut")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding()
+                        .buttonStyle(.glassProminent)
+
+                        Link(destination: kofi) {
+                            HStack(spacing: 10) {
+                                Text("☕️")
+                                Text("Donner un café sur Ko-fi")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                        }
+                        .buttonStyle(.glassProminent)
+                        .tint(.green)
                     }
-                    .buttonStyle(.glassProminent)
                     .padding(.horizontal, 20)
 
                     VStack(spacing: 8) {

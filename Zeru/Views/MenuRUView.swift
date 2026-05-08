@@ -232,15 +232,14 @@ struct MenuRUView: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                    .frame(minWidth: 100, maxWidth: 190, alignment: .leading)
+                    .frame(minWidth: 120, maxWidth: 220, alignment: .leading)
 
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .glassEffect(.regular, in: Capsule())
         }
         .buttonStyle(.plain)
     }

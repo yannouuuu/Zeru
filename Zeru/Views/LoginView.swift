@@ -6,168 +6,234 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct LoginView: View {
     @ObservedObject var authVM: AuthViewModel
     @State private var username = ""
     @State private var password = ""
     @State private var isPasswordVisible = false
-    @Namespace private var namespace
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case username, password }
 
     private var normalizedUsername: String { username.trimmed }
     private var normalizedPassword: String { password.trimmed }
+    private var isValid: Bool { !normalizedUsername.isEmpty && !normalizedPassword.isEmpty }
 
     var body: some View {
         ZStack {
-            Rectangle()
-                .fill(.background)
-                .ignoresSafeArea()
+            Color.black.ignoresSafeArea()
 
             VStack(spacing: 0) {
-
                 Spacer()
 
-                // ── Logo ──────────────────────────────────
-                VStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.accentColor.opacity(0.12))
-                            .frame(width: 90, height: 90)
-                        Image(systemName: "creditcard.fill")
-                            .font(.system(size: 36, weight: .semibold))
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    .glassEffect(.regular, in: .circle)
+                hero
+                    .padding(.bottom, 40)
 
-                    Text("Zeru")
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
-
-                    Text("Ton compte Izly, sans prise de tête")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.bottom, 48)
-
-                Spacer()
-
-                // ── Formulaire ────────────────────────────
-                GlassEffectContainer(spacing: 0) {
-                    VStack(spacing: 0) {
-
-                        HStack(spacing: 12) {
-                            Image(systemName: "envelope")
-                                .foregroundStyle(Color.accentColor)
-                                .frame(width: 20)
-                            TextField("Email ou numéro", text: $username)
-                                .textContentType(.emailAddress)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .submitLabel(.next)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 0))
-                        .glassEffectID("email", in: namespace)
-
-                        Divider()
-                            .padding(.leading, 48)
-
-                        HStack(spacing: 12) {
-                            Image(systemName: "lock")
-                                .foregroundStyle(Color.accentColor)
-                                .frame(width: 20)
-
-                            if isPasswordVisible {
-                                TextField("Mot de passe", text: $password)
-                                    .textContentType(.password)
-                                    .autocorrectionDisabled()
-                                    .textInputAutocapitalization(.never)
-                                    .submitLabel(.go)
-                                    .onSubmit {
-                                        Task {
-                                            await authVM.login(identifier: normalizedUsername, password: normalizedPassword)
-                                        }
-                                    }
-                            } else {
-                                SecureField("Mot de passe", text: $password)
-                                    .textContentType(.password)
-                                    .submitLabel(.go)
-                                    .onSubmit {
-                                        Task {
-                                            await authVM.login(identifier: normalizedUsername, password: normalizedPassword)
-                                        }
-                                    }
-                            }
-
-                            Button {
-                                isPasswordVisible.toggle()
-                            } label: {
-                                Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
-                                    .foregroundStyle(.secondary)
-                                    .font(.system(size: 14))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 0))
-                        .glassEffectID("password", in: namespace)
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .padding(.horizontal, 24)
+                formCard
 
                 if let error = authVM.errorMessage {
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.circle.fill")
-                            .foregroundStyle(.red)
-                            .font(.caption)
+                            .font(AppFont.caption(weight: .semibold))
                         Text(error)
-                            .foregroundStyle(.red)
-                            .font(.caption)
+                            .font(AppFont.caption(weight: .medium))
                     }
-                    .padding(.top, 10)
+                    .foregroundStyle(Color.red.opacity(0.85))
+                    .padding(.top, 12)
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                // ── Bouton connexion ──────────────────────
-                Button {
-                    Task {
-                        await authVM.login(identifier: normalizedUsername, password: normalizedPassword)
-                    }
-                } label: {
-                    Group {
-                        if authVM.isLoading {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Text("Se connecter")
-                                .fontWeight(.semibold)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                PrimaryCapsuleButton(
+                    title: "Se connecter",
+                    isLoading: authVM.isLoading,
+                    isEnabled: isValid && !authVM.isLoading
+                ) {
+                    submit()
                 }
-                .buttonStyle(.glassProminent)
-                .disabled(authVM.isLoading || normalizedUsername.isEmpty || normalizedPassword.isEmpty)
                 .padding(.horizontal, 24)
-                .padding(.top, 16)
+                .padding(.top, 18)
 
                 Spacer()
 
-                // ── Footer ────────────────────────────────
-                VStack(spacing: 4) {
-                    Text("En te connectant, tu acceptes les")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                    Link("Conditions d'utilisation d'Izly", destination: URL(string: "https://www.izly.fr/conditions-generales")!)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.bottom, 24)
+                footer
             }
         }
+        .preferredColorScheme(.dark)
         .animation(.spring(duration: 0.3), value: authVM.errorMessage)
+    }
+
+    // MARK: - Hero
+
+    private var hero: some View {
+        VStack(spacing: 24) {
+            Image("IconPreviewClassic")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [.white.opacity(0.25), .white.opacity(0.04)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+
+            VStack(spacing: 8) {
+                Text("Zeru")
+                    .font(AppFont.system(size: 32, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                Text("Ton compte Izly, sans prise de tête.")
+                    .font(AppFont.subheadline(weight: .regular))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 11, weight: .medium))
+                Text("Identifiants protégés par le Keychain")
+                    .font(AppFont.caption(weight: .medium))
+            }
+            .foregroundStyle(.white.opacity(0.5))
+        }
+    }
+
+    // MARK: - Form
+
+    private var formCard: some View {
+        VStack(spacing: 0) {
+            field(
+                icon: "envelope",
+                placeholder: "Email ou numéro",
+                text: $username,
+                isSecure: false,
+                focus: .username,
+                submitLabel: .next,
+                keyboardType: .emailAddress,
+                textContentType: .emailAddress
+            )
+            .onSubmit { focusedField = .password }
+
+            Divider()
+                .background(Color.white.opacity(0.08))
+                .padding(.leading, 48)
+
+            field(
+                icon: "lock",
+                placeholder: "Mot de passe",
+                text: $password,
+                isSecure: !isPasswordVisible,
+                focus: .password,
+                submitLabel: .go,
+                keyboardType: .default,
+                textContentType: nil,
+                trailing: AnyView(
+                    Button {
+                        isPasswordVisible.toggle()
+                    } label: {
+                        Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
+                    .buttonStyle(.plain)
+                )
+            )
+            .onSubmit { submit() }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .padding(.horizontal, 24)
+    }
+
+    @ViewBuilder
+    private func field(
+        icon: String,
+        placeholder: String,
+        text: Binding<String>,
+        isSecure: Bool,
+        focus: Field,
+        submitLabel: SubmitLabel,
+        keyboardType: UIKeyboardType = .default,
+        textContentType: UITextContentType? = nil,
+        trailing: AnyView? = nil
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.5))
+                .frame(width: 20)
+
+            Group {
+                if isSecure {
+                    SecureField("", text: text, prompt: placeholderText(placeholder))
+                        .textContentType(.password)
+                } else {
+                    TextField("", text: text, prompt: placeholderText(placeholder))
+                        .textContentType(textContentType)
+                        .keyboardType(keyboardType)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+            }
+            .font(AppFont.body())
+            .foregroundStyle(.white)
+            .tint(.white)
+            .submitLabel(submitLabel)
+            .focused($focusedField, equals: focus)
+
+            if let trailing {
+                trailing
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+    }
+
+    private func placeholderText(_ value: String) -> Text {
+        Text(value)
+            .font(AppFont.body())
+            .foregroundStyle(.white.opacity(0.35))
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        VStack(spacing: 4) {
+            Text("En te connectant, tu acceptes les")
+                .font(AppFont.caption2())
+                .foregroundStyle(.white.opacity(0.3))
+            Link("Conditions d'utilisation d'Izly",
+                 destination: URL(string: "https://www.izly.fr/conditions-generales")!)
+                .font(AppFont.caption2(weight: .medium))
+                .foregroundStyle(.white.opacity(0.5))
+        }
+        .padding(.bottom, 24)
+    }
+
+    // MARK: - Actions
+
+    private func submit() {
+        guard isValid else { return }
+        focusedField = nil
+        Task {
+            await authVM.login(identifier: normalizedUsername, password: normalizedPassword)
+        }
     }
 }

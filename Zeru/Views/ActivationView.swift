@@ -12,7 +12,7 @@ struct ActivationView: View {
     @ObservedObject var authVM: AuthViewModel
     @State private var activationURL = ""
     @State private var clipboardURLCandidate: String? = nil
-    @Namespace private var namespace
+    @FocusState private var isURLFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
 
     private var normalizedActivationURL: String { activationURL.trimmed }
@@ -20,6 +20,14 @@ struct ActivationView: View {
     private var shouldShowClipboardSuggestion: Bool {
         guard let candidate = clipboardURLCandidate else { return false }
         return candidate != normalizedActivationURL
+    }
+
+    private var accentGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color.accentColor.opacity(0.35), Color.accentColor.opacity(0.08)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 
     private func refreshClipboardCandidate() {
@@ -36,8 +44,8 @@ struct ActivationView: View {
 
         let matches = detector.matches(in: raw, options: [], range: range)
         let candidate = matches
-            .compactMap(\ .url)
-            .map(\ .absoluteString)
+            .compactMap(\.url)
+            .map(\.absoluteString)
             .first { $0.localizedCaseInsensitiveContains("izly") }
 
         if let candidate {
@@ -45,7 +53,6 @@ struct ActivationView: View {
             return
         }
 
-        // Fallback: le presse-papiers peut contenir directement une URL sans texte autour.
         if raw.localizedCaseInsensitiveContains("izly"),
            let url = URL(string: raw),
            let scheme = url.scheme?.lowercased(),
@@ -58,116 +65,190 @@ struct ActivationView: View {
 
     var body: some View {
         ZStack {
-            Rectangle()
-                .fill(.background)
-                .ignoresSafeArea()
+            Color.black.ignoresSafeArea()
+
+            ambientBackground
 
             VStack(spacing: 0) {
+                Spacer()
+
+                hero
 
                 Spacer()
 
-                // ── Icône + texte ──────────────────────────
-                VStack(spacing: 12) {
-                    Image(systemName: "envelope.fill")
-                        .font(.system(size: 52, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                        .glassEffect(.regular, in: .circle)
-                        .frame(width: 90, height: 90)
-
-                    Text("Vérifie tes messages")
-                        .font(.title2.bold())
-
-                    Text("Izly t'a envoyé un lien par SMS ou email.\nColle-le ci-dessous.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-
-                Spacer()
-
-                // ── Champ + boutons en bas ─────────────────
-                VStack(spacing: 12) {
-
-                    GlassEffectContainer(spacing: 0) {
-                        HStack(spacing: 12) {
-                            Image(systemName: "link")
-                                .foregroundStyle(Color.accentColor)
-                                .frame(width: 20)
-                            TextField("https://mon-espace.izly.fr/...", text: $activationURL)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .foregroundStyle(activationURL.isEmpty ? .secondary : .primary)
-                                .opacity(activationURL.isEmpty ? 0.6 : 1)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
-
-                    if shouldShowClipboardSuggestion,
-                       let candidate = clipboardURLCandidate {
-                        Button {
-                            activationURL = candidate
-                        } label: {
-                            Label("Utiliser le lien copie", systemImage: "doc.on.clipboard")
-                                .font(.footnote.weight(.medium))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                        .buttonStyle(.glass)
-                    }
-
-                    if let error = authVM.errorMessage {
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundStyle(.red)
-                                .font(.caption)
-                            Text(error)
-                                .foregroundStyle(.red)
-                                .font(.caption)
-                        }
-                        .transition(.opacity)
-                    }
-
-                    Button {
-                        Task { await authVM.tokenize(activationURL: normalizedActivationURL) }
-                    } label: {
-                        Group {
-                            if authVM.isLoading {
-                                ProgressView().tint(.white)
-                            } else {
-                                Text("Activer")
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .disabled(authVM.isLoading || normalizedActivationURL.isEmpty)
-
-                    Button {
-                        authVM.step = .login
-                    } label: {
-                        Text("Retour")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                    }
-                    .buttonStyle(.glass)
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 32)
+                form
             }
         }
+        .preferredColorScheme(.dark)
         .animation(.spring(duration: 0.3), value: authVM.errorMessage)
-        .onAppear {
-            refreshClipboardCandidate()
-        }
+        .animation(.spring(duration: 0.3), value: shouldShowClipboardSuggestion)
+        .onAppear { refreshClipboardCandidate() }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 refreshClipboardCandidate()
             }
         }
+    }
+
+    // MARK: - Hero
+
+    private var hero: some View {
+        VStack(spacing: 36) {
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.accentColor.opacity(0.18), .clear],
+                            center: .center,
+                            startRadius: 10,
+                            endRadius: 70
+                        )
+                    )
+                    .frame(width: 140, height: 140)
+
+                Image(systemName: "envelope.fill")
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundStyle(.white)
+                    .frame(width: 80, height: 80)
+                    .background(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(Color.white.opacity(0.06))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(accentGradient, lineWidth: 1)
+                    )
+            }
+
+            VStack(spacing: 12) {
+                Text("Vérifie tes messages")
+                    .font(AppFont.system(size: 28, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                Text("Izly t'a envoyé un lien par SMS ou email.\nColle-le ci-dessous pour activer ton accès.")
+                    .font(AppFont.subheadline(weight: .regular))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 28)
+    }
+
+    // MARK: - Form
+
+    private var form: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "link")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .frame(width: 20)
+
+                TextField("",
+                          text: $activationURL,
+                          prompt: Text("https://mon-espace.izly.fr/...")
+                            .font(AppFont.body())
+                            .foregroundStyle(.white.opacity(0.35)))
+                    .font(AppFont.body())
+                    .foregroundStyle(.white)
+                    .tint(.white)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($isURLFocused)
+                    .submitLabel(.go)
+                    .onSubmit { submit() }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+
+            if shouldShowClipboardSuggestion, let candidate = clipboardURLCandidate {
+                Button {
+                    activationURL = candidate
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Utiliser le lien copié")
+                            .font(AppFont.footnote(weight: .medium))
+                    }
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        Capsule()
+                            .fill(Color.white.opacity(0.06))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            if let error = authVM.errorMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(AppFont.caption(weight: .semibold))
+                    Text(error)
+                        .font(AppFont.caption(weight: .medium))
+                }
+                .foregroundStyle(Color.red.opacity(0.85))
+                .padding(.top, 2)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            PrimaryCapsuleButton(
+                title: "Activer",
+                isLoading: authVM.isLoading,
+                isEnabled: !authVM.isLoading && !normalizedActivationURL.isEmpty
+            ) {
+                submit()
+            }
+            .padding(.top, 4)
+
+            SecondaryCapsuleButton(title: "Retour") {
+                authVM.step = .login
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 28)
+    }
+
+    // MARK: - Background
+
+    private var ambientBackground: some View {
+        GeometryReader { geo in
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.18))
+                    .frame(width: geo.size.width * 0.85)
+                    .blur(radius: 70)
+                    .offset(x: -geo.size.width * 0.25, y: -geo.size.height * 0.3)
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+
+    // MARK: - Actions
+
+    private func submit() {
+        guard !normalizedActivationURL.isEmpty else { return }
+        isURLFocused = false
+        Task { await authVM.tokenize(activationURL: normalizedActivationURL) }
     }
 }

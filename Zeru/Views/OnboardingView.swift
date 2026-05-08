@@ -2,141 +2,123 @@
 //  OnboardingView.swift
 //  Zeru
 //
-//  Created by Yann Renard on 18/04/2026.
+//  Onboarding paginé style Remodex (TabView + bottom bar fixe + dots animés).
 //
 
 import SwiftUI
-import UIOnboarding
 
-struct OnboardingView: UIViewControllerRepresentable {
-    typealias UIViewControllerType = UIOnboardingViewController
-
+struct OnboardingView: View {
     var onDismiss: () -> Void
 
-    func makeUIViewController(context: Context) -> UIOnboardingViewController {
-        let vc = UIOnboardingViewController(withConfiguration: .setUp())
-        vc.delegate = context.coordinator
-        return vc
-    }
+    @State private var currentPage = 0
 
-    func updateUIViewController(_ uiViewController: UIOnboardingViewController, context: Context) {}
+    private let pageCount = 4
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onDismiss: onDismiss)
-    }
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-    class Coordinator: NSObject, UIOnboardingViewControllerDelegate {
-        let onDismiss: () -> Void
+            OnboardingAmbientBackground()
+                .opacity(ambientOpacity)
+                .animation(.easeInOut(duration: 0.5), value: currentPage)
 
-        init(onDismiss: @escaping () -> Void) {
-            self.onDismiss = onDismiss
-        }
+            VStack(spacing: 0) {
+                TabView(selection: $currentPage) {
+                    OnboardingWelcomePage()
+                        .tag(0)
 
-        func didFinishOnboarding(onboardingViewController: UIOnboardingViewController) {
-            onboardingViewController.modalTransitionStyle = .crossDissolve
-            onboardingViewController.dismiss(animated: true) {
-                UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
-                self.onDismiss()
+                    OnboardingFeaturesPage()
+                        .tag(1)
+
+                    OnboardingStepPage(
+                        stepNumber: 1,
+                        icon: "person.crop.circle.badge.checkmark",
+                        title: "Connecte ton compte Izly",
+                        description: "Utilise ton email ou ton numéro Izly avec ton mot de passe habituel. Zeru s'occupe ensuite de récupérer ton solde et tes opérations."
+                    )
+                    .tag(2)
+
+                    OnboardingStepPage(
+                        stepNumber: 2,
+                        icon: "lock.shield.fill",
+                        title: "Tes données restent à toi",
+                        description: "Tes identifiants sont chiffrés dans le Keychain iCloud. Zeru n'a aucun serveur et ne stocke rien.",
+                        caption: "Zeru n'est pas affilié à Izly ou aux Crous."
+                    )
+                    .tag(3)
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+
+                bottomBar
             }
         }
-    }
-}
-
-// ── Configuration ──────────────────────────────────────
-
-struct UIOnboardingHelper {
-
-    static func setUpIcon() -> UIImage {
-        // Utilise ton icône depuis les Assets
-        return Bundle.main.appIcon ?? UIImage(systemName: "creditcard.fill")!
+        .preferredColorScheme(.dark)
     }
 
-    static func setUpFirstTitleLine() -> NSMutableAttributedString {
-        .init(string: "Bienvenue sur", attributes: [
-            .foregroundColor: UIColor.label,
-            .font: UIFont.systemFont(ofSize: 28, weight: .bold)
-        ])
-    }
+    // MARK: - Bottom bar
 
-    static func setUpSecondTitleLine() -> NSMutableAttributedString {
-        .init(string: "Zeru", attributes: [
-            .foregroundColor: UIColor(Color.accentColor),
-            .font: UIFont.systemFont(ofSize: 28, weight: .bold)
-        ])
-    }
+    private var bottomBar: some View {
+        VStack(spacing: 20) {
+            HStack(spacing: 8) {
+                ForEach(0..<pageCount, id: \.self) { index in
+                    Capsule()
+                        .fill(index == currentPage ? Color.white : Color.white.opacity(0.18))
+                        .frame(width: index == currentPage ? 24 : 8, height: 8)
+                }
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: currentPage)
 
-    static func setUpFeatures() -> [UIOnboardingFeature] {
-        [
-            .init(
-                icon: UIImage(systemName: "creditcard.fill",
-                              withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .semibold))!
-                    .withTintColor(.systemBlue, renderingMode: .alwaysOriginal),
-                title: "Ton solde en temps réel",
-                description: "Consulte ton solde Izly et ton historique de transactions directement depuis l'app."
-            ),
-            .init(
-                icon: UIImage(systemName: "qrcode",
-                              withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .semibold))!
-                    .withTintColor(.systemPurple, renderingMode: .alwaysOriginal),
-                title: "Payer en un scan",
-                description: "Génère ton QR code de paiement en un instant. Valable 30 secondes et renouvelé automatiquement."
-            ),
-            .init(
-                icon: UIImage(systemName: "chart.line.uptrend.xyaxis",
-                              withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .semibold))!
-                    .withTintColor(.systemGreen, renderingMode: .alwaysOriginal),
-                title: "Suis tes dépenses",
-                description: "Visualise l'évolution de ton compte avec un graphe interactif et filtre par type de transaction."
-            ),
-            .init(
-                icon: UIImage(systemName: "lock.shield.fill",
-                              withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .semibold))!
-                    .withTintColor(.systemOrange, renderingMode: .alwaysOriginal),
-                title: "Sécurisé & privé",
-                description: "Tes identifiants sont chiffrés dans le Keychain iCloud. Zeru ne stocke rien sur ses serveurs."
+            PrimaryCapsuleButton(title: buttonTitle, action: handleContinue)
+
+            OpenSourceBadge(style: .light)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 12)
+        .background(
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.6), .black],
+                startPoint: .top,
+                endPoint: .bottom
             )
-        ]
-    }
-
-    static func setUpNotice() -> UIOnboardingTextViewConfiguration {
-        .init(
-            icon: UIImage(systemName: "info.circle.fill")!
-                .withTintColor(.secondaryLabel, renderingMode: .alwaysOriginal),
-            text: "Zeru n'est pas affilié à Izly ou Les Crous.",
-            linkTitle: "En savoir plus",
-            link: "https://github.com/LiterateInk/Ezly.js",
-            linkColor: UIColor(Color.accentColor)
+            .frame(height: 50)
+            .offset(y: -50),
+            alignment: .top
         )
     }
 
-    static func setUpButton() -> UIOnboardingButtonConfiguration {
-        .init(
-            title: "Commencer",
-            titleColor: .white,
-            backgroundColor: UIColor(Color.accentColor)
-        )
+    // MARK: - State
+
+    private var ambientOpacity: Double {
+        switch currentPage {
+        case 0: 1.0
+        case 1: 0.35
+        default: 0.0
+        }
+    }
+
+    private var buttonTitle: String {
+        switch currentPage {
+        case 0: return "Découvrir"
+        case 1: return "Continuer"
+        case pageCount - 1: return "Se connecter"
+        default: return "Continuer"
+        }
+    }
+
+    private func handleContinue() {
+        if currentPage < pageCount - 1 {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                currentPage += 1
+            }
+        } else {
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+            onDismiss()
+        }
     }
 }
 
-extension UIOnboardingViewConfiguration {
-    static func setUp() -> UIOnboardingViewConfiguration {
-        .init(
-            appIcon:              UIOnboardingHelper.setUpIcon(),
-            firstTitleLine:       UIOnboardingHelper.setUpFirstTitleLine(),
-            secondTitleLine:      UIOnboardingHelper.setUpSecondTitleLine(),
-            features:             UIOnboardingHelper.setUpFeatures(),
-            textViewConfiguration: UIOnboardingHelper.setUpNotice(),
-            buttonConfiguration:  UIOnboardingHelper.setUpButton()
-        )
-    }
-}
+// MARK: - Previews
 
-extension Bundle {
-    var appIcon: UIImage? {
-        guard let icons = infoDictionary?["CFBundleIcons"] as? [String: Any],
-              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
-              let files = primary["CFBundleIconFiles"] as? [String],
-              let last = files.last else { return nil }
-        return UIImage(named: last)
-    }
+#Preview("Full Flow") {
+    OnboardingView { print("Dismiss") }
 }
