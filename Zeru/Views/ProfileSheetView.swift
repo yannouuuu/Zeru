@@ -2,7 +2,8 @@
 //  ProfileSheetView.swift
 //  Zeru
 //
-//  Profil : une carte de membre, un bilan, une semaine de dépenses.
+//  Profil : l'en-tête (avatar, nom, état), une rangée d'actions,
+//  puis les informations du compte en liste native.
 //
 
 import SwiftUI
@@ -15,6 +16,7 @@ struct ProfileSheetView: View {
 
     @State private var selectedItem: PhotosPickerItem?
     @State private var isPickerPresented = false
+    @State private var didCopy = false
 
     // MARK: - Données
 
@@ -78,23 +80,82 @@ struct ProfileSheetView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    memberCard
-                    statsSection
+            List {
+                Section {
+                    header
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
 
-                    if hasSpendingThisWeek {
-                        spendingSection
+                Section {
+                    actionRow
+                        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 12, trailing: 8))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+
+                Section("Compte") {
+                    LabeledContent("Solde") {
+                        Text(authVM.balance.euroFormatted)
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
                     }
 
-                    actionsSection
-                    footer
+                    LabeledContent("Identifiant") {
+                        Text(authVM.profile?.identifier ?? "")
+                            .lineLimit(1)
+                    }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 32)
+
+                Section("Statistiques") {
+                    LabeledContent("Dépensé") {
+                        Text(totalSpent.euroFormatted).monospacedDigit()
+                    }
+                    LabeledContent("Rechargé") {
+                        Text(totalTopup.euroFormatted).monospacedDigit()
+                    }
+                    LabeledContent("Repas pris") {
+                        Text("\(mealCount)").monospacedDigit()
+                    }
+                    LabeledContent("Moyenne par repas") {
+                        Text(averagePerMeal.euroFormatted).monospacedDigit()
+                    }
+                }
+
+                if hasSpendingThisWeek {
+                    Section("Cette semaine") {
+                        Chart(dailySpending) { day in
+                            BarMark(
+                                x: .value("Jour", day.label),
+                                y: .value("Dépensé", day.amount)
+                            )
+                            .foregroundStyle(Color.accentColor.gradient)
+                            .cornerRadius(4)
+                        }
+                        .chartYAxis(.hidden)
+                        .chartXAxis {
+                            AxisMarks { _ in
+                                AxisValueLabel()
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(height: 110)
+                        .padding(.vertical, 6)
+                    }
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        authVM.logout()
+                        dismiss()
+                    } label: {
+                        Text("Se déconnecter")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
             }
-            .scrollIndicators(.hidden)
             .navigationTitle("Profil")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -114,79 +175,49 @@ struct ProfileSheetView: View {
         }
     }
 
-    // MARK: - La carte
+    // MARK: - En-tête
 
-    private var memberCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 16) {
-                avatar
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(fullName)
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.primary)
-
-                    Text(authVM.profile?.email ?? "")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
-            }
-
-            Divider()
-                .overlay(.white.opacity(0.08))
-
-            HStack(alignment: .firstTextBaseline) {
-                Label("Compte Izly", systemImage: "checkmark.seal.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.green)
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text("Solde")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(authVM.balance.euroFormatted)
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                }
-            }
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            ZStack(alignment: .topTrailing) {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
-
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+    private var header: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
                     .fill(
-                        LinearGradient(
+                        RadialGradient(
                             colors: [
-                                Color.accentColor.opacity(0.38),
-                                Color.accentColor.opacity(0.10),
+                                Color.accentColor.opacity(0.45),
+                                Color.accentColor.opacity(0.12),
                                 .clear
                             ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                            center: .center,
+                            startRadius: 8,
+                            endRadius: 118
                         )
                     )
+                    .frame(width: 236, height: 236)
+                    .blur(radius: 6)
+                    .allowsHitTesting(false)
 
-                Text("Z")
-                    .font(.system(size: 190, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.05))
-                    .offset(x: 26, y: -34)
-                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                avatar
             }
+            .frame(height: 128)
+
+            VStack(spacing: 3) {
+                Text(fullName)
+                    .font(.title2.weight(.bold))
+
+                Text(authVM.profile?.email ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Label("Compte Izly connecté", systemImage: "checkmark.seal.fill")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.green)
         }
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(.white.opacity(0.08), lineWidth: 1)
-        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8)
+        .padding(.bottom, 2)
     }
 
     private var avatar: some View {
@@ -202,30 +233,23 @@ struct ProfileSheetView: View {
                             .fill(.ultraThinMaterial)
                             .overlay {
                                 Text(initials)
-                                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                                    .font(.system(size: 36, weight: .bold, design: .rounded))
                                     .foregroundStyle(.white)
                             }
                     }
                 }
-                .frame(width: 76, height: 76)
+                .frame(width: 108, height: 108)
                 .clipShape(.circle)
                 .overlay {
-                    Circle()
-                        .strokeBorder(
-                            AngularGradient(
-                                colors: [.accentColor, .white.opacity(0.9), .accentColor],
-                                center: .center
-                            ),
-                            lineWidth: 2.5
-                        )
+                    Circle().strokeBorder(.white.opacity(0.14), lineWidth: 1)
                 }
 
                 Image(systemName: "camera.fill")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
                     .background(Color.accentColor, in: .circle)
-                    .overlay(Circle().strokeBorder(.black.opacity(0.35), lineWidth: 1.5))
+                    .overlay(Circle().strokeBorder(.black.opacity(0.30), lineWidth: 2))
                     .offset(x: 2, y: 2)
             }
         }
@@ -233,159 +257,61 @@ struct ProfileSheetView: View {
         .accessibilityLabel("Changer la photo de profil")
     }
 
-    // MARK: - Le bilan
-
-    private var statsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Ton bilan")
-                .font(.headline)
-                .padding(.horizontal, 4)
-
-            LazyVGrid(
-                columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
-                spacing: 12
-            ) {
-                StatTile(
-                    icon: "arrow.up.right",
-                    tint: .red,
-                    value: totalSpent.euroFormatted,
-                    label: "Dépensé"
-                )
-                StatTile(
-                    icon: "arrow.down.left",
-                    tint: .green,
-                    value: totalTopup.euroFormatted,
-                    label: "Rechargé"
-                )
-                StatTile(
-                    icon: "fork.knife",
-                    tint: .orange,
-                    value: "\(mealCount)",
-                    label: "Repas pris"
-                )
-                StatTile(
-                    icon: "chart.bar.fill",
-                    tint: .blue,
-                    value: averagePerMeal.euroFormatted,
-                    label: "Moyenne par repas"
-                )
-            }
-        }
-    }
-
-    // MARK: - La semaine
-
-    private var spendingSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Cette semaine")
-                .font(.headline)
-                .padding(.horizontal, 4)
-
-            Chart(dailySpending) { day in
-                BarMark(
-                    x: .value("Jour", day.label),
-                    y: .value("Dépensé", day.amount)
-                )
-                .foregroundStyle(Color.accentColor.gradient)
-                .cornerRadius(4)
-            }
-            .chartYAxis(.hidden)
-            .chartXAxis {
-                AxisMarks { _ in
-                    AxisValueLabel()
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(height: 110)
-            .padding(16)
-            .glassEffect(.regular, in: .rect(cornerRadius: 20))
-        }
-    }
-
     // MARK: - Actions
 
-    private var actionsSection: some View {
-        VStack(spacing: 10) {
+    private var actionRow: some View {
+        HStack(alignment: .top, spacing: 0) {
             Button {
                 isPickerPresented = true
             } label: {
-                Label("Changer la photo", systemImage: "photo")
-                    .font(.subheadline.weight(.medium))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
+                actionLabel(icon: "camera.fill", title: "Photo", tint: .blue)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
 
-            Button(role: .destructive) {
-                authVM.logout()
-                dismiss()
-            } label: {
-                Text("Se déconnecter")
-                    .font(.subheadline.weight(.medium))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
+            ShareLink(item: URL(string: "https://github.com/yannouuuu/Zeru")!) {
+                actionLabel(icon: "square.and.arrow.up", title: "Partager", tint: .indigo)
             }
-            .buttonStyle(.bordered)
-            .tint(.red)
+            .buttonStyle(.plain)
+
+            Button {
+                copyIdentifier()
+            } label: {
+                actionLabel(
+                    icon: didCopy ? "checkmark" : "doc.on.doc",
+                    title: didCopy ? "Copié" : "Copier",
+                    tint: .teal
+                )
+            }
+            .buttonStyle(.plain)
         }
+        .padding(.top, 2)
     }
 
-    // MARK: - Pied
+    private func actionLabel(icon: String, title: String, tint: Color) -> some View {
+        VStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(tint.gradient, in: .circle)
 
-    private var footer: some View {
-        VStack(spacing: 4) {
-            Text("Zeru n'est pas affilié à Izly ni aux Crous.")
+            Text(title)
                 .font(.caption2)
-                .foregroundStyle(.tertiary)
-
-            Text("Version \(appVersion)")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 4)
+        .contentShape(Rectangle())
     }
 
-    private var appVersion: String {
-        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
-        return "\(short) (\(build))"
-    }
-}
+    private func copyIdentifier() {
+        UIPasteboard.general.string = authVM.profile?.identifier ?? authVM.profile?.email
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
 
-// MARK: - Tuile de statistique
-
-private struct StatTile: View {
-    let icon: String
-    let tint: Color
-    let value: String
-    let label: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 28, height: 28)
-                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(value)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+        withAnimation(.snappy) { didCopy = true }
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            withAnimation(.snappy) { didCopy = false }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 18))
     }
 }
 
