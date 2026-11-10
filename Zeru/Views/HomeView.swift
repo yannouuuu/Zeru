@@ -242,24 +242,13 @@ struct BalanceChartCard: View {
             Divider()
 
             // ── Sélecteur période ──────────────────────
-            HStack(spacing: 0) {
+            Picker("Période", selection: $selectedPeriod) {
                 ForEach(Period.allCases, id: \.self) { period in
-                    Button {
-                        withAnimation(.spring(duration: 0.3)) {
-                            selectedPeriod = period
-                        }
-                    } label: {
-                        Text(period.label)
-                            .font(.caption)
-                            .fontWeight(selectedPeriod == period ? .semibold : .regular)
-                            .foregroundStyle(selectedPeriod == period ? .primary : .secondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.plain)
+                    Text(period.label).tag(period)
                 }
             }
-            .padding(.horizontal, 8)
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
             .padding(.top, 8)
 
             // ── Graphe ligne ───────────────────────────
