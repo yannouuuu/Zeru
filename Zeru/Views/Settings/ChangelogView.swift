@@ -1,38 +1,47 @@
+//
+//  ChangelogView.swift
+//  Zeru
+//
+//  Nouveautés : une section par version, avec sa date et ses changements.
+//
+
 import SwiftUI
 
 struct ChangelogView: View {
-
     var body: some View {
         List {
-            // Bannière
             Section {
                 Image("Bannerv1.0")
                     .resizable()
                     .scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .listRowInsets(.init())
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                     .listRowBackground(Color.clear)
             }
 
-            // Entrées de changelog
             ForEach(ChangelogEntry.all) { entry in
                 Section {
                     ForEach(entry.changes, id: \.self) { change in
-                        HStack(alignment: .top, spacing: 10) {
+                        HStack(alignment: .top, spacing: 12) {
                             Image(systemName: change.icon)
-                                .font(.caption.weight(.semibold))
+                                .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(change.color)
-                                .frame(width: 18, height: 18)
-                                .padding(.top, 1)
+                                .frame(width: 26, height: 26)
+                                .background(
+                                    change.color.opacity(0.12),
+                                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                )
+
                             Text(change.description)
                                 .font(.subheadline)
-                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.top, 3)
                         }
                     }
                 } header: {
                     HStack(alignment: .firstTextBaseline) {
                         Text("Version \(entry.version)")
-                            .font(.headline)
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
                             .textCase(nil)
                         Spacer()
@@ -44,12 +53,12 @@ struct ChangelogView: View {
                 }
             }
         }
-        .navigationTitle("Changelogs")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle("Nouveautés")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
-// MARK: - Models
+// MARK: - Modèles
 
 struct ChangelogEntry: Identifiable {
     let id = UUID()
@@ -64,7 +73,7 @@ struct ChangelogEntry: Identifiable {
             changes: [
                 .feature("Personnalisation de l'icône de l'app — 8 thèmes disponibles"),
                 .feature("Couleur d'accentuation avec carrousel de couleurs"),
-                .feature("Page À propos avec halo animé et réseaux sociaux"),
+                .feature("Page À propos avec réseaux sociaux"),
                 .improvement("Changelogs intégrés dans l'app"),
                 .improvement("Notifications : demande de permission améliorée"),
                 .fix("Correction du cache d'icône après redémarrage"),
@@ -91,23 +100,23 @@ struct ChangelogChange: Hashable {
     let kind: Kind
     let description: String
 
-    static func feature(_ desc: String)     -> ChangelogChange { .init(kind: .feature,     description: desc) }
+    static func feature(_ desc: String) -> ChangelogChange { .init(kind: .feature, description: desc) }
     static func improvement(_ desc: String) -> ChangelogChange { .init(kind: .improvement, description: desc) }
-    static func fix(_ desc: String)         -> ChangelogChange { .init(kind: .fix,          description: desc) }
+    static func fix(_ desc: String) -> ChangelogChange { .init(kind: .fix, description: desc) }
 
     var icon: String {
         switch kind {
-        case .feature:     return "sparkles"
+        case .feature: return "sparkles"
         case .improvement: return "arrow.up.circle.fill"
-        case .fix:         return "wrench.and.screwdriver.fill"
+        case .fix: return "wrench.and.screwdriver.fill"
         }
     }
 
     var color: Color {
         switch kind {
-        case .feature:     return .accentColor
+        case .feature: return .accentColor
         case .improvement: return .blue
-        case .fix:         return .orange
+        case .fix: return .orange
         }
     }
 }
