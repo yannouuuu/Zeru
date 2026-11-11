@@ -222,12 +222,14 @@ struct HomeView: View {
             Text(selectedPoint?.date ?? "Solde disponible")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .animation(.snappy(duration: 0.12), value: selectedPoint?.id)
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(selectedPoint?.balance.euroFormatted ?? authVM.balance.euroFormatted)
                     .font(.system(size: 62, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.12), value: selectedPoint?.id)
 
                 if selectedPoint == nil {
                     Text("\(mealsRemaining) repas")
@@ -243,6 +245,7 @@ struct HomeView: View {
                 .font(.caption)
                 .foregroundStyle(captionColor)
                 .lineLimit(1)
+                .animation(.snappy(duration: 0.12), value: selectedPoint?.id)
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)
@@ -315,7 +318,6 @@ struct HomeView: View {
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
             .frame(height: 150)
-            .padding(.top, 10)
             .chartOverlay { proxy in
                 GeometryReader { geometry in
                     let plot = proxy.plotFrame.map { geometry[$0] } ?? .zero
@@ -371,6 +373,7 @@ struct HomeView: View {
                     )
                 }
             }
+            .padding(.top, 10)
         } else {
             Text("Pas encore de données sur cette période")
                 .font(.caption)
