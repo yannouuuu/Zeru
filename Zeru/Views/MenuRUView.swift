@@ -460,10 +460,7 @@ private struct DayMenuPage: View {
                 .padding(.vertical, 12)
             } else {
                 ForEach(Array(meals.enumerated()), id: \.element.id) { index, meal in
-                    MealEditorialSection(
-                        meal: meal,
-                        showsTimeline: meals.count > 1
-                    )
+                    MealEditorialSection(meal: meal)
                     if index < meals.count - 1 {
                         Divider().padding(.leading, 18)
                     }
@@ -476,8 +473,7 @@ private struct DayMenuPage: View {
 
 private struct MealEditorialSection: View {
     let meal: CrousMeal
-    let showsTimeline: Bool
-    
+
     private var toneColor: Color {
         switch meal.moment {
         case "matin": return .orange
@@ -486,28 +482,14 @@ private struct MealEditorialSection: View {
         default: return .accentColor
         }
     }
-    
+
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            if showsTimeline {
-                VStack(spacing: 0) {
-                    Circle()
-                        .fill(toneColor)
-                        .frame(width: 10, height: 10)
-                        .padding(.top, 6)
-                    Rectangle()
-                        .fill(toneColor.opacity(0.25))
-                        .frame(width: 2)
-                        .padding(.top, 4)
-                }
-            }
-            
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Image(systemName: meal.momentIcon)
                     .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(toneColor)
-                
+                    .foregroundStyle(toneColor)
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(meal.momentLabel)
                         .font(.title3)
@@ -516,27 +498,26 @@ private struct MealEditorialSection: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                
+
                 Spacer()
+            }
+
+            if let info = meal.information,
+               !info.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                    Text(info)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
                 }
-                
-                if let info = meal.information,
-                   !info.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "info.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 2)
-                        Text(info)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.leading)
-                    }
-                }
-                
-                ForEach(meal.categories) { category in
-                    MealCategorySection(category: category, toneColor: toneColor)
-                }
+            }
+
+            ForEach(meal.categories) { category in
+                MealCategorySection(category: category, toneColor: toneColor)
             }
         }
         .padding(.vertical, 4)
