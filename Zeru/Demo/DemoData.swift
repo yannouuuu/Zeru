@@ -47,6 +47,11 @@ enum DemoData {
         counter: 0
     )
 
+    // MARK: - Tarif CROUS
+
+    /// Compte de démonstration : étudiante boursière (code tarif 98 → repas à 1 €).
+    static let tariff = IzlyTariff(number: 98, societyCode: 10)
+
     // MARK: - Opérations
 
     // MARK: - Historique
@@ -74,7 +79,7 @@ enum DemoData {
             // Repas au RU en semaine, un jour sur deux.
             if !isWeekend && dayOffset % 2 == 0 {
                 let isCafeteria = dayOffset % 10 == 0
-                let amount = isCafeteria ? -1.10 : -3.30
+                let amount = isCafeteria ? -1.10 : -1.00
                 balance += amount
                 identifier += 1
                 generated.append(
@@ -108,7 +113,7 @@ enum DemoData {
 
             // Recharge quand le solde descend, ou tous les 30 jours.
             if balance < 8 || dayOffset % 30 == 0 {
-                let amount = 30.0
+                let amount = 12.0
                 balance += amount
                 identifier += 1
                 generated.append(
@@ -201,7 +206,7 @@ enum DemoData {
                 CrousFoodCategory(name: "Fromages", dishes: ["Yaourt nature", "Fromage blanc"]),
                 CrousFoodCategory(name: "Desserts", dishes: ["Tarte aux pommes", "Fruit de saison"])
             ],
-            information: offset == 0 ? "Menu à 3,30 € — plat végétarien disponible." : nil
+            information: offset == 0 ? "Menu à 1 € — plat végétarien disponible." : nil
         )
 
         let dinner = CrousMeal(

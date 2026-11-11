@@ -29,7 +29,7 @@ struct HomeView: View {
     }
 
     private var mealsRemaining: Int {
-        max(0, Int(authVM.balance / 3.30))
+        max(0, Int(authVM.balance / authVM.mealPrice))
     }
 
     private var cutoffDate: Date {
@@ -62,7 +62,9 @@ struct HomeView: View {
         if let selectedPoint, let transaction = selectedPoint.transaction {
             return "\(transaction.amount.signedEuroFormatted) · \(transaction.label)"
         }
-        return "\(mealsRemaining) repas au RU · 3,30 € le repas"
+        let meals = "\(mealsRemaining) repas au RU"
+        let price = "\(authVM.mealPrice.euroFormatted) le repas"
+        return authVM.isBoursier ? "Boursier · \(meals) · \(price)" : "\(meals) · \(price)"
     }
 
     private var captionColor: Color {
@@ -224,28 +226,21 @@ struct HomeView: View {
                 .foregroundStyle(.secondary)
                 .animation(.snappy(duration: 0.12), value: selectedPoint?.id)
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(selectedPoint?.balance.euroFormatted ?? authVM.balance.euroFormatted)
-                    .font(.system(size: 62, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.12), value: selectedPoint?.id)
-
-                if selectedPoint == nil {
-                    Text("\(mealsRemaining) repas")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.quaternary, in: .capsule)
-                }
-            }
+            Text(selectedPoint?.balance.euroFormatted ?? authVM.balance.euroFormatted)
+                .font(.system(size: 62, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.12), value: selectedPoint?.id)
 
             Text(heroCaption)
                 .font(.caption)
                 .foregroundStyle(captionColor)
                 .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.2), value: heroCaption)
                 .animation(.snappy(duration: 0.12), value: selectedPoint?.id)
+                .animation(.snappy(duration: 0.2), value: authVM.mealPrice)
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)

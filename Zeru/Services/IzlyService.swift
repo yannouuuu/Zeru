@@ -236,6 +236,85 @@ actor IzlyService {
         return Double(balStr) ?? 0.0
     }
 
+    // MARK: - Tarif CROUS (boursier ou non)
+    /// Récupère le tarif CROUS du compte pour savoir si l'étudiant est boursier.
+    /// L'information est portée par `GetContactDetails` → `Result.IzlyProfile.NumeroTarif`.
+    func fetchTariff(identification: IzlyIdentification) async throws -> IzlyTariff {
+        do {
+            return try await fetchContactTariff(
+                identification: identification,
+                receiver: identification.identifier
+            )
+        } catch IzlyError.invalidCredentials {
+            throw IzlyError.invalidCredentials
+        } catch {
+            // Certains comptes ne répondent qu'avec l'identifiant interne.
+            return try await fetchContactTariff(
+                identification: identification,
+                receiver: identification.userID
+            )
+        }
+    }
+
+    private func fetchContactTariff(
+        identification: IzlyIdentification,
+        receiver: String
+    ) async throws -> IzlyTariff {
+        let url = URL(string: "\(REST_BASE)GetContactDetails")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json",                     forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(identification.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("AIZ",                                  forHTTPHeaderField: "channel")
+        request.setValue(SERVICE_VERSION,                        forHTTPHeaderField: "clientVersion")
+        request.setValue("T",                                    forHTTPHeaderField: "format")
+        request.setValue("fr",                                   forHTTPHeaderField: "language")
+        request.setValue("A",                                    forHTTPHeaderField: "model")
+        request.setValue(identification.sessionID,               forHTTPHeaderField: "sessionId")
+        request.setValue(CLIENT_TYPE,                            forHTTPHeaderField: "smoneyClientType")
+        request.setValue(identification.identifier,              forHTTPHeaderField: "userId")
+        request.setValue("1.0",                                  forHTTPHeaderField: "version")
+        request.setValue(SOAP_USER_AGENT,                        forHTTPHeaderField: "User-Agent")
+
+        let body: [String: Any] = ["receiver": ["Identifier": receiver]]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw IzlyError.parseError
+        }
+
+        if let message = json["ErrorMessage"] as? String {
+            if let code = json["Code"] as? Int, code == 140 || code == 570 {
+                throw IzlyError.invalidCredentials
+            }
+            throw IzlyError.networkError(message)
+        }
+
+        guard let result = json["GetContactDetailsResult"] as? [String: Any],
+              let details = result["Result"] as? [String: Any],
+              let izlyProfile = details["IzlyProfile"] as? [String: Any] else {
+            throw IzlyError.parseError
+        }
+
+        return IzlyTariff(
+            number: Self.intValue(izlyProfile["NumeroTarif"]),
+            societyCode: Self.intValue(izlyProfile["CodeSociete"])
+        )
+    }
+
+    /// Les nombres du JSON Izly arrivent parfois en `Int`, parfois en `String`.
+    private static func intValue(_ value: Any?) -> Int? {
+        switch value {
+        case let int as Int:      return int
+        case let number as NSNumber: return number.intValue
+        case let string as String: return Int(string)
+        default:                  return nil
+        }
+    }
+
     // MARK: - Transactions réelles
     func fetchOperations(identification: IzlyIdentification, group: Int, limit: Int = 100) async throws -> [IzlyTransaction] {
         let urlStr = "\(REST_BASE)GetHomePageOperations?transactionGroup=\(group)&top=\(limit)"
