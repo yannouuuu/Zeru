@@ -59,8 +59,23 @@ final class CROUSViewModel: NSObject {
     // MARK: - Chargement initial
 
     func load() async {
+        if DemoMode.isActive {
+            loadDemoData()
+            return
+        }
         requestLocation()
         await loadRegions()
+    }
+
+    /// Charge le jeu de données de démonstration (aucun réseau).
+    private func loadDemoData() {
+        regions            = DemoData.regions
+        selectedRegion     = DemoData.regions.first
+        restaurants        = DemoData.restaurants
+        selectedRestaurant = DemoData.restaurants.first
+        menus              = DemoData.menus
+        selectedDate       = Calendar.current.startOfDay(for: Date())
+        error              = nil
     }
 
     func loadRegions() async {

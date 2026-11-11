@@ -36,6 +36,15 @@ class AuthViewModel: ObservableObject {
 
     // MARK: - Init
     init() {
+        if DemoMode.isActive {
+            profile        = DemoData.profile
+            identification = DemoData.identification
+            balance        = DemoData.balance
+            transactions   = DemoData.transactions
+            _step = Published(initialValue: .home)
+            return
+        }
+
         if let saved = KeychainService.loadIdentification() {
             identification = saved
             profile = KeychainService.loadProfile()
@@ -44,6 +53,18 @@ class AuthViewModel: ObservableObject {
         } else {
             _step = Published(initialValue: .login)
         }
+    }
+
+    // MARK: - Démonstration
+
+    /// Entre dans le compte de démonstration (aucun identifiant requis).
+    func enterDemoMode() {
+        DemoMode.enable()
+        profile        = DemoData.profile
+        identification = DemoData.identification
+        balance        = DemoData.balance
+        transactions   = DemoData.transactions
+        step           = .home
     }
 
     // MARK: - Étape 1 : Login
@@ -109,6 +130,8 @@ class AuthViewModel: ObservableObject {
 
     // MARK: - Charger solde + transactions
     func loadTransactions() async {
+        if DemoMode.isActive { return }
+
         guard var identification = identification else { return }
 
         do {
@@ -161,6 +184,16 @@ class AuthViewModel: ObservableObject {
 
     // MARK: - Déconnexion
     func logout() {
+        if DemoMode.isActive {
+            DemoMode.disable()
+            identification = nil
+            profile        = nil
+            balance        = 0.0
+            transactions   = []
+            step           = .login
+            return
+        }
+
         KeychainService.deleteIdentification()
         KeychainService.deletePassword()
         KeychainService.deleteProfile()

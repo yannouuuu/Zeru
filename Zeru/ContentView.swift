@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var authVM = AuthViewModel()
-    @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") && !DemoMode.isActive
 
     var body: some View {
         Group {
