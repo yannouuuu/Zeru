@@ -64,30 +64,59 @@ struct HomeView: View {
         return "\(mealsRemaining) repas au RU · 3,30 € le repas"
     }
 
+    private var captionColor: Color {
+        guard let transaction = selectedPoint?.transaction else { return .secondary }
+        return transaction.amount >= 0 ? .green : .red
+    }
+
     private func buildLineData() -> [BalancePoint] {
         let filtered = filteredTransactions.sorted { $0.timestamp < $1.timestamp }
         guard !filtered.isEmpty else { return [] }
 
-        // On part du solde actuel et on remonte le temps : chaque point est le
-        // solde juste avant l'opération. Le dernier point est donc exactement
-        // le solde affiché, ce qui évite tout décalage en fin de courbe.
+        // Solde de départ = solde actuel - somme des transactions de la période.
+        let periodSum = filtered.reduce(0.0) { $0 + $1.amount }
+        var running = max(0, authVM.balance - periodSum)
+
         var points: [BalancePoint] = [
-            BalancePoint(date: Date(), balance: authVM.balance, transaction: nil)
+            BalancePoint(
+                index: 0,
+                date: formatPointDate(cutoffDate),
+                balance: running,
+                transaction: nil
+            )
         ]
 
-        var running = authVM.balance
-        for transaction in filtered.reversed() {
-            running -= transaction.amount
+        for (offset, transaction) in filtered.enumerated() {
+            running += transaction.amount
+            running = max(0, running) // Izly ne peut pas être négatif
             points.append(
                 BalancePoint(
-                    date: Date(timeIntervalSince1970: transaction.timestamp / 1000),
+                    index: offset + 1,
+                    date: transaction.date,
                     balance: running,
                     transaction: transaction
                 )
             )
         }
 
-        return points.reversed()
+        // Dernier point = solde réel actuel.
+        points.append(
+            BalancePoint(
+                index: points.count,
+                date: "Maintenant",
+                balance: authVM.balance,
+                transaction: nil
+            )
+        )
+
+        return points
+    }
+
+    private func formatPointDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.dateFormat = "dd/MM/yyyy"
+        return formatter.string(from: date)
     }
 
     // MARK: - Corps
@@ -189,16 +218,17 @@ struct HomeView: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Solde disponible")
+            Text(selectedPoint?.date ?? "Solde disponible")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .animation(.interactiveSpring(duration: 0.1), value: selectedPoint?.index)
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(selectedPoint?.balance.euroFormatted ?? authVM.balance.euroFormatted)
                     .font(.system(size: 62, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                    .animation(.snappy, value: authVM.balance)
+                    .animation(.interactiveSpring(duration: 0.1), value: selectedPoint?.index)
 
                 if selectedPoint == nil {
                     Text("\(mealsRemaining) repas")
@@ -212,7 +242,7 @@ struct HomeView: View {
 
             Text(heroCaption)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(captionColor)
                 .lineLimit(1)
         }
         .padding(.horizontal, 20)
@@ -221,25 +251,17 @@ struct HomeView: View {
 
     // MARK: - Le graphe
 
-    private var yDomain: ClosedRange<Double> {
-        let balances = cachedLineData.map(\.balance)
-        let lowest = balances.min() ?? 0
-        let highest = balances.max() ?? 1
-        let padding = max(0.5, (highest - lowest) * 0.18)
-        return (lowest - padding)...(highest + padding)
-    }
-
     @ViewBuilder
     private var chartSection: some View {
         if cachedLineData.count >= 2 {
             Chart(cachedLineData) { point in
                 AreaMark(
-                    x: .value("Date", point.date),
+                    x: .value("Index", point.index),
                     y: .value("Solde", point.balance)
                 )
                 .foregroundStyle(
                     LinearGradient(
-                        colors: [Color.accentColor.opacity(0.30), Color.accentColor.opacity(0.02)],
+                        colors: [Color.accentColor.opacity(0.3), .clear],
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -247,64 +269,56 @@ struct HomeView: View {
                 .interpolationMethod(.catmullRom)
 
                 LineMark(
-                    x: .value("Date", point.date),
+                    x: .value("Index", point.index),
                     y: .value("Solde", point.balance)
                 )
                 .foregroundStyle(Color.accentColor)
-                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .lineStyle(StrokeStyle(lineWidth: 2))
                 .interpolationMethod(.catmullRom)
+
+                if let selected = selectedPoint, selected.index == point.index {
+                    PointMark(
+                        x: .value("Index", point.index),
+                        y: .value("Solde", point.balance)
+                    )
+                    .symbolSize(80)
+                    .foregroundStyle(Color.accentColor)
+                }
             }
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
-            .chartYScale(domain: yDomain)
             .frame(height: 150)
             .padding(.top, 10)
             .chartOverlay { proxy in
                 GeometryReader { geometry in
-                    let plotFrame = proxy.plotFrame.map { geometry[$0] } ?? .zero
+                    Rectangle()
+                        .fill(.clear)
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    guard let frame = proxy.plotFrame else { return }
+                                    let plot = geometry[frame]
+                                    guard plot.width > 0 else { return }
 
-                    ZStack(alignment: .topLeading) {
-                        Rectangle()
-                            .fill(.clear)
-                            .contentShape(Rectangle())
+                                    let ratio = max(0, min(1, (value.location.x - plot.origin.x) / plot.width))
+                                    let index = Int((ratio * CGFloat(cachedLineData.count - 1)).rounded())
+                                    let clamped = max(0, min(cachedLineData.count - 1, index))
+                                    let point = cachedLineData[clamped]
 
-                        if let selected = selectedPoint,
-                           let x = proxy.position(forX: selected.date),
-                           let y = proxy.position(forY: selected.balance) {
-                            Path { path in
-                                path.move(to: CGPoint(x: x, y: plotFrame.minY))
-                                path.addLine(to: CGPoint(x: x, y: plotFrame.maxY))
-                            }
-                            .stroke(
-                                Color.secondary.opacity(0.35),
-                                style: StrokeStyle(lineWidth: 1, dash: [3, 3])
-                            )
-
-                            Circle()
-                                .fill(Color.accentColor)
-                                .frame(width: 9, height: 9)
-                                .position(x: x, y: y)
-                        }
-                    }
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                guard let frame = proxy.plotFrame else { return }
-                                let x = value.location.x - geometry[frame].origin.x
-                                guard let date = proxy.value(atX: x, as: Date.self) else { return }
-                                let nearest = cachedLineData.min(by: {
-                                    abs($0.date.timeIntervalSince(date)) <
-                                    abs($1.date.timeIntervalSince(date))
-                                })
-                                if let nearest, selectedPoint?.id != nearest.id {
-                                    selectedPoint = nearest
-                                    haptic.impactOccurred()
+                                    if selectedPoint?.index != point.index {
+                                        haptic.impactOccurred()
+                                        withAnimation(.interactiveSpring(duration: 0.1)) {
+                                            selectedPoint = point
+                                        }
+                                    }
                                 }
-                            }
-                            .onEnded { _ in
-                                selectedPoint = nil
-                            }
-                    )
+                                .onEnded { _ in
+                                    withAnimation(.spring(duration: 0.3)) {
+                                        selectedPoint = nil
+                                    }
+                                }
+                        )
                 }
             }
         } else {
@@ -478,7 +492,8 @@ struct TransactionRow: View {
 // ── Modèles ────────────────────────────────────────────
 struct BalancePoint: Identifiable {
     let id          = UUID()
-    let date:        Date
+    let index:       Int
+    let date:        String
     let balance:     Double
     let transaction: IzlyTransaction?
 }
