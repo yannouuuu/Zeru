@@ -500,7 +500,26 @@ private struct BalanceChartContent: View {
     }
 
     private var cgPoints: [CGPoint] {
-        points.map { CGPoint(x: x(for: $0.date), y: y(for: $0.balance)) }
+        smoothed(points.map { CGPoint(x: x(for: $0.date), y: y(for: $0.balance)) })
+    }
+
+    /// Lissage façon Lenis : chaque point glisse légèrement vers ses voisins
+    /// pour adoucir les ruptures de pente. Les extrémités restent exactes,
+    /// donc la courbe finit toujours sur le solde courant.
+    private func smoothed(_ raw: [CGPoint]) -> [CGPoint] {
+        guard raw.count > 2 else { return raw }
+
+        var result = raw
+        for _ in 0..<2 {
+            var next = result
+            for index in 1..<result.count - 1 {
+                next[index].y = result[index - 1].y * 0.25
+                    + result[index].y * 0.5
+                    + result[index + 1].y * 0.25
+            }
+            result = next
+        }
+        return result
     }
 
     var body: some View {
