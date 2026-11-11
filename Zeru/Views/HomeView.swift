@@ -10,10 +10,11 @@ import Charts
 
 struct HomeView: View {
     @ObservedObject var authVM: AuthViewModel
-    @AppStorage("home.betaBannerDismissed") private var betaBannerDismissed = false
-    @Namespace private var namespace
-    @State private var selectedPeriod: Period = .month // éviter le risque pendant les vacances de 2 semaines par exemple
+    @State private var selectedPeriod: Period = .month
     @State private var showProfile = false
+    @State private var selectedPoint: BalancePoint?
+    @State private var cachedLineData: [BalancePoint] = []
+    private let haptic = UIImpactFeedbackGenerator(style: .light)
 
     private var initials: String {
         let f = authVM.profile?.firstName.prefix(1) ?? "?"
@@ -21,27 +22,112 @@ struct HomeView: View {
         return "\(f)\(l)".uppercased()
     }
 
+    private var mealsRemaining: Int {
+        max(0, Int(authVM.balance / 3.30))
+    }
+
+    private var cutoffDate: Date {
+        let now = Date()
+        switch selectedPeriod {
+        case .week:
+            return Calendar.current.date(byAdding: .day, value: -7, to: now) ?? now
+        case .month:
+            return Calendar.current.date(byAdding: .month, value: -1, to: now) ?? now
+        case .year:
+            return Calendar.current.date(byAdding: .year, value: -1, to: now) ?? now
+        }
+    }
+
+    private var filteredTransactions: [IzlyTransaction] {
+        authVM.transactions.filter {
+            Date(timeIntervalSince1970: $0.timestamp / 1000) >= cutoffDate
+        }
+    }
+
+    private var totalSpent: Double {
+        filteredTransactions.filter { $0.amount < 0 }.reduce(0) { $0 + abs($1.amount) }
+    }
+
+    private var transactionCount: Int {
+        filteredTransactions.filter { $0.amount < 0 }.count
+    }
+
+    private var heroCaption: String {
+        if let selectedPoint, let transaction = selectedPoint.transaction {
+            return "\(transaction.amount.signedEuroFormatted) · \(transaction.label)"
+        }
+        return "\(mealsRemaining) repas au RU · 3,30 € le repas"
+    }
+
+    private func buildLineData() -> [BalancePoint] {
+        let filtered = filteredTransactions.sorted { $0.timestamp < $1.timestamp }
+        guard !filtered.isEmpty else { return [] }
+
+        let periodSum = filtered.reduce(0.0) { $0 + $1.amount }
+        var running = max(0, authVM.balance - periodSum)
+
+        var points: [BalancePoint] = [
+            BalancePoint(
+                index: 0,
+                date: formatPointDate(cutoffDate),
+                balance: running,
+                transaction: nil
+            )
+        ]
+
+        for (index, transaction) in filtered.enumerated() {
+            running = max(0, running + transaction.amount)
+            points.append(
+                BalancePoint(
+                    index: index + 1,
+                    date: transaction.date,
+                    balance: running,
+                    transaction: transaction
+                )
+            )
+        }
+
+        points.append(
+            BalancePoint(
+                index: points.count,
+                date: "Maintenant",
+                balance: authVM.balance,
+                transaction: nil
+            )
+        )
+        return points
+    }
+
+    private func formatPointDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.dateFormat = "dd/MM/yyyy"
+        return formatter.string(from: date)
+    }
+
+    // MARK: - Corps
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    if !betaBannerDismissed {
-                        betaBanner
-                            .padding(.horizontal, 20)
-                    }
+                VStack(alignment: .leading, spacing: 0) {
+                    hero
+                    chartSection
+                    periodPicker
+                    summary
 
-                    BalanceChartCard(
-                        balance: authVM.balance,
-                        transactions: authVM.transactions,
-                        selectedPeriod: $selectedPeriod
-                    )
-                    .padding(.horizontal, 20)
+                    Divider()
+                        .padding(.horizontal, 20)
+                        .padding(.top, 18)
 
                     TransactionHistorySection(transactions: authVM.transactions)
+                        .padding(.top, 16)
                 }
                 .padding(.bottom, 32)
             }
+            .scrollIndicators(.hidden)
             .navigationTitle("Accueil")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -71,298 +157,180 @@ struct HomeView: View {
         .task {
             await authVM.loadTransactions()
         }
-    }
-    
-    private var betaBanner: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.orange)
-                .padding(.top, 2)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Application en Beta")
-                    .font(.subheadline)
-                    .fontWeight(.bold)
-                    .foregroundStyle(Color.orange)
-                Text("Certaines fonctionnalités peuvent évoluer ou être instables.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
-
-            Button {
-                withAnimation(.spring(duration: 0.25)) {
-                    betaBannerDismissed = true
-                }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color.orange.opacity(0.12))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(Color.orange.opacity(0.35), lineWidth: 1)
-        )
-        .transition(.move(edge: .top).combined(with: .opacity))
-    }
-}
-
-// ── Carte solde + graphe ───────────────────────────────
-struct BalanceChartCard: View {
-    let balance: Double
-    let transactions: [IzlyTransaction]
-    @Binding var selectedPeriod: Period
-    @State private var selectedPoint: BalancePoint? = nil
-    @State private var cachedLineData: [BalancePoint] = []
-    private let haptic = UIImpactFeedbackGenerator(style: .light)
-    
-    private var cutoffDate: Date {
-        let now = Date()
-        switch selectedPeriod {
-        case .week:
-            return Calendar.current.date(byAdding: .day, value: -7, to: now) ?? now
-        case .month:
-            return Calendar.current.date(byAdding: .month, value: -1, to: now) ?? now
-        case .year:
-            return Calendar.current.date(byAdding: .year, value: -1, to: now) ?? now
-        }
-    }
-    
-    private var filteredTransactionsForPeriod: [IzlyTransaction] {
-        transactions.filter { Date(timeIntervalSince1970: $0.timestamp / 1000) >= cutoffDate }
-    }
-
-    private func buildLineData() -> [BalancePoint] {
-        // On filtre les transactions dans la période
-        let filtered = filteredTransactionsForPeriod
-            .sorted { $0.timestamp < $1.timestamp }
-
-        guard !filtered.isEmpty else { return [] }
-
-        // On part du solde actuel et on remonte uniquement sur les transactions filtrées
-        // Le solde de départ = solde actuel - somme des transactions de la période
-        let periodSum = filtered.reduce(0.0) { $0 + $1.amount }
-        let startBalance = max(0, balance - periodSum)
-
-        var running = startBalance
-        var points: [BalancePoint] = [
-            BalancePoint(
-                index: 0,
-                date: formatPointDate(cutoffDate),
-                balance: running,
-                transaction: nil
-            )
-        ]
-
-        for (i, tx) in filtered.enumerated() {
-            running += tx.amount
-            running = max(0, running)  // Izly ne peut pas être négatif
-            points.append(BalancePoint(
-                index: i + 1,
-                date: tx.date,
-                balance: running,
-                transaction: tx
-            ))
-        }
-
-        // Dernier point = solde réel actuel
-        points.append(BalancePoint(
-            index: points.count,
-            date: "Maintenant",
-            balance: balance,
-            transaction: nil
-        ))
-
-        return points
-    }
-
-    private func formatPointDate(_ date: Date) -> String {
-        let fmt = DateFormatter()
-        fmt.locale     = Locale(identifier: "fr_FR")
-        fmt.dateFormat = "dd/MM/yyyy"
-        return fmt.string(from: date)
-    }
-    var totalSpent: Double {
-        filteredTransactionsForPeriod
-            .filter { $0.amount < 0 }
-            .reduce(0) { $0 + abs($1.amount) }
-    }
-    
-    var transactionCountInPeriod: Int {
-        filteredTransactionsForPeriod.filter { $0.amount < 0 }.count
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-
-            // ── Solde ──────────────────────────────────
-            VStack(spacing: 4) {
-                if let point = selectedPoint {
-                    Text(point.date)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .transition(.opacity)
-                    Text(point.balance.euroFormatted)
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
-                        .contentTransition(.numericText())
-                    if let tx = point.transaction {
-                        Text(tx.amount.signedEuroFormatted + " · " + tx.label)
-                            .font(.caption)
-                            .foregroundStyle(tx.amount >= 0 ? .green : .red)
-                            .transition(.opacity)
-                    }
-                } else {
-                    Text("Solde disponible")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .transition(.opacity)
-                    Text(balance.euroFormatted)
-                        .font(.system(size: 52, weight: .bold, design: .rounded))
-                        .contentTransition(.numericText())
-                }
-            }
-            .animation(.interactiveSpring(duration: 0.1), value: selectedPoint?.index)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 28)
-            .padding(.bottom, 20)
-
-            Divider()
-
-            // ── Sélecteur période ──────────────────────
-            Picker("Période", selection: $selectedPeriod) {
-                ForEach(Period.allCases, id: \.self) { period in
-                    Text(period.label).tag(period)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-
-            // ── Graphe ligne ───────────────────────────
-            if cachedLineData.count >= 2 {
-                Chart(cachedLineData) { point in
-                    AreaMark(
-                        x: .value("Index", point.index),
-                        y: .value("Solde", point.balance)
-                    )
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.accentColor.opacity(0.3), .clear],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .interpolationMethod(.catmullRom)
-
-                    LineMark(
-                        x: .value("Index", point.index),
-                        y: .value("Solde", point.balance)
-                    )
-                    .foregroundStyle(Color.accentColor)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
-                    .interpolationMethod(.catmullRom)
-
-                    if let selected = selectedPoint, selected.index == point.index {
-                        PointMark(
-                            x: .value("Index", point.index),
-                            y: .value("Solde", point.balance)
-                        )
-                        .symbolSize(80)
-                        .foregroundStyle(Color.accentColor)
-                    }
-                }
-                .chartXAxis(.hidden)
-                .chartYAxis(.hidden)
-                .frame(height: 130)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            guard !cachedLineData.isEmpty else { return }
-                            let chartWidth: CGFloat = UIScreen.main.bounds.width - 40 - 32
-                            let ratio = value.location.x / chartWidth
-                            let index = Int((ratio * CGFloat(cachedLineData.count - 1)).rounded())
-                            let clamped = max(0, min(cachedLineData.count - 1, index))
-                            let point = cachedLineData[clamped]
-                            if selectedPoint?.index != point.index {
-                                haptic.impactOccurred()
-                                withAnimation(.interactiveSpring(duration: 0.1)) {
-                                    selectedPoint = point
-                                }
-                            }
-                        }
-                        .onEnded { _ in
-                            withAnimation(.spring(duration: 0.3)) {
-                                selectedPoint = nil
-                            }
-                        }
-                )
-            } else {
-                Text("Pas encore de données")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .frame(height: 130)
-            }
-
-            Divider()
-
-            // ── Résumé ─────────────────────────────────
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Dépensé")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(totalSpent.euroFormatted)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.red)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("Transactions")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("\(transactionCountInPeriod)")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-        }
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         .onAppear {
             haptic.prepare()
             cachedLineData = buildLineData()
         }
-        .onChange(of: transactions) { _, _ in
+        .onChange(of: authVM.transactions) { _, _ in
             cachedLineData = buildLineData()
         }
         .onChange(of: selectedPeriod) { _, _ in
-            withAnimation(.spring(duration: 0.3)) {
+            withAnimation(.snappy) {
                 cachedLineData = buildLineData()
-                selectedPoint  = nil
+                selectedPoint = nil
             }
         }
     }
+
+    // MARK: - Le solde
+
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Solde disponible")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(selectedPoint?.balance.euroFormatted ?? authVM.balance.euroFormatted)
+                    .font(.system(size: 62, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.15), value: selectedPoint?.index)
+                    .animation(.snappy, value: authVM.balance)
+
+                if selectedPoint == nil {
+                    Text("\(mealsRemaining) repas")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary, in: .capsule)
+                }
+            }
+
+            Text(heroCaption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
+    }
+
+    // MARK: - Le graphe
+
+    @ViewBuilder
+    private var chartSection: some View {
+        if cachedLineData.count >= 2 {
+            Chart(cachedLineData) { point in
+                AreaMark(
+                    x: .value("Index", point.index),
+                    y: .value("Solde", point.balance)
+                )
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [Color.accentColor.opacity(0.28), Color.accentColor.opacity(0.01)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .interpolationMethod(.catmullRom)
+
+                LineMark(
+                    x: .value("Index", point.index),
+                    y: .value("Solde", point.balance)
+                )
+                .foregroundStyle(Color.accentColor)
+                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .interpolationMethod(.catmullRom)
+
+                if let selected = selectedPoint, selected.index == point.index {
+                    PointMark(
+                        x: .value("Index", point.index),
+                        y: .value("Solde", point.balance)
+                    )
+                    .symbolSize(80)
+                    .foregroundStyle(Color.accentColor)
+                }
+            }
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .frame(height: 150)
+            .padding(.top, 10)
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(.clear)
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    guard let plotFrame = proxy.plotFrame else { return }
+                                    let origin = geometry[plotFrame].origin.x
+                                    let width = geometry[plotFrame].width
+                                    guard width > 0 else { return }
+                                    let ratio = max(0, min(1, (value.location.x - origin) / width))
+                                    let index = Int((ratio * CGFloat(cachedLineData.count - 1)).rounded())
+                                    let point = cachedLineData[max(0, min(cachedLineData.count - 1, index))]
+                                    if selectedPoint?.index != point.index {
+                                        haptic.impactOccurred()
+                                        withAnimation(.snappy(duration: 0.12)) {
+                                            selectedPoint = point
+                                        }
+                                    }
+                                }
+                                .onEnded { _ in
+                                    withAnimation(.snappy) {
+                                        selectedPoint = nil
+                                    }
+                                }
+                        )
+                }
+            }
+        } else {
+            Text("Pas encore de données sur cette période")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 150)
+                .padding(.top, 10)
+        }
+    }
+
+    // MARK: - Période
+
+    private var periodPicker: some View {
+        Picker("Période", selection: $selectedPeriod) {
+            ForEach(Period.allCases, id: \.self) { period in
+                Text(period.label).tag(period)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+    }
+
+    // MARK: - Résumé
+
+    private var summary: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Dépensé")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(totalSpent.euroFormatted)
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("Transactions")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("\(transactionCount)")
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+    }
 }
 
-// ── Section historique ─────────────────────────────────
 struct TransactionHistorySection: View {
     let transactions: [IzlyTransaction]
     @State private var filter: TransactionFilter = .all
