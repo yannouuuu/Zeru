@@ -147,6 +147,7 @@ struct HomeView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Profil de \(fullName)")
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
             .sheet(isPresented: $showProfile) {
                 ProfileSheetView(authVM: authVM)
