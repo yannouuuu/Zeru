@@ -558,8 +558,9 @@ private struct BalanceChartContent: View {
         )
     }
 
-    /// Courbe lissée (Catmull-Rom converti en Bézier), éventuellement fermée
-    /// vers le bas pour remplir l'aire sous la courbe.
+    /// Courbe lissée par tangentes monotones (Fritsch–Carlson) : elle passe
+    /// exactement par les points et ne dépasse jamais entre deux, ce qui donne
+    /// un tracé naturel pour des données de solde.
     private func smoothPath(_ points: [CGPoint], closingTo bottom: CGFloat? = nil) -> Path {
         var path = Path()
         guard points.count > 1 else { return path }
@@ -571,26 +572,52 @@ private struct BalanceChartContent: View {
             path.move(to: points[0])
         }
 
-        for index in 0..<points.count - 1 {
-            let p0 = points[max(0, index - 1)]
-            let p1 = points[index]
-            let p2 = points[index + 1]
-            let p3 = points[min(points.count - 1, index + 2)]
+        let count = points.count
 
+        // Pentes entre points consécutifs.
+        var secants = [CGFloat](repeating: 0, count: count - 1)
+        for index in 0..<count - 1 {
+            let dx = points[index + 1].x - points[index].x
+            secants[index] = dx == 0 ? 0 : (points[index + 1].y - points[index].y) / dx
+        }
+
+        // Tangentes initiales (moyenne des pentes voisines).
+        var tangents = [CGFloat](repeating: 0, count: count)
+        tangents[0] = secants[0]
+        tangents[count - 1] = secants[count - 2]
+        for index in 1..<count - 1 {
+            tangents[index] = (secants[index - 1] + secants[index]) / 2
+        }
+
+        // Filtre de monotonie : on borne les tangentes pour éviter tout
+        // dépassement de la courbe au-dessus ou en dessous des points.
+        for index in 0..<count - 1 where secants[index] != 0 {
+            let alpha = tangents[index] / secants[index]
+            let beta = tangents[index + 1] / secants[index]
+            let magnitude = alpha * alpha + beta * beta
+
+            if magnitude > 9 {
+                let scale = 3 / sqrt(magnitude)
+                tangents[index] = scale * alpha * secants[index]
+                tangents[index + 1] = scale * beta * secants[index]
+            }
+        }
+
+        for index in 0..<count - 1 {
+            let dx = points[index + 1].x - points[index].x
             let control1 = CGPoint(
-                x: p1.x + (p2.x - p0.x) / 6,
-                y: p1.y + (p2.y - p0.y) / 6
+                x: points[index].x + dx / 3,
+                y: points[index].y + tangents[index] * dx / 3
             )
             let control2 = CGPoint(
-                x: p2.x - (p3.x - p1.x) / 6,
-                y: p2.y - (p3.y - p1.y) / 6
+                x: points[index + 1].x - dx / 3,
+                y: points[index + 1].y - tangents[index + 1] * dx / 3
             )
-
-            path.addCurve(to: p2, control1: control1, control2: control2)
+            path.addCurve(to: points[index + 1], control1: control1, control2: control2)
         }
 
         if let bottom {
-            path.addLine(to: CGPoint(x: points[points.count - 1].x, y: bottom))
+            path.addLine(to: CGPoint(x: points[count - 1].x, y: bottom))
             path.closeSubpath()
         }
 

@@ -37,8 +37,6 @@ enum DemoData {
         identifier: "camille.moreau@etu.u-paris.fr"
     )
 
-    static let balance: Double = 24.50
-
     static let identification = IzlyIdentification(
         accessToken: "demo-access-token",
         refreshToken: "demo-refresh-token",
@@ -51,42 +49,96 @@ enum DemoData {
 
     // MARK: - Opérations
 
-    private static func timestamp(daysAgo: Int, hour: Int, minute: Int) -> Double {
+    // MARK: - Historique
+
+    /// Historique cohérent : on simule l'année en partant d'un solde de 18 €,
+    /// avec des repas au RU et des recharges quand le solde descend. Le solde
+    /// final est celui affiché, et remonter le temps ne passe jamais sous zéro.
+    private static let ledger: (balance: Double, transactions: [IzlyTransaction]) = generateLedger()
+
+    static var balance: Double { ledger.balance }
+    static var transactions: [IzlyTransaction] { ledger.transactions }
+
+    private static func generateLedger() -> (balance: Double, transactions: [IzlyTransaction]) {
         let calendar = Calendar.current
-        let day = calendar.date(byAdding: .day, value: -daysAgo, to: Date()) ?? Date()
-        let composed = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
-        return composed.timeIntervalSince1970 * 1000
+        let now = Date()
+        var balance = 18.0
+        var generated: [IzlyTransaction] = []
+        var identifier = 0
+
+        for dayOffset in stride(from: 365, through: 0, by: -1) {
+            guard let day = calendar.date(byAdding: .day, value: -dayOffset, to: now) else { continue }
+            let weekday = calendar.component(.weekday, from: day)
+            let isWeekend = weekday == 1 || weekday == 7
+
+            // Repas au RU en semaine, un jour sur deux.
+            if !isWeekend && dayOffset % 2 == 0 {
+                let isCafeteria = dayOffset % 10 == 0
+                let amount = isCafeteria ? -1.10 : -3.30
+                balance += amount
+                identifier += 1
+                generated.append(
+                    IzlyTransaction(
+                        id: "demo-\(identifier)",
+                        date: shortDate(day),
+                        label: isCafeteria ? "Cafétéria — Crous Jussieu" : "Resto U — Crous Jussieu",
+                        amount: amount,
+                        group: 0,
+                        timestamp: timestamp(of: day, hour: isCafeteria ? 10 : 12, minute: isCafeteria ? 5 : 30)
+                    )
+                )
+            }
+
+            // Un virement reçu de temps en temps.
+            if dayOffset % 90 == 15 {
+                let amount = 10.0
+                balance += amount
+                identifier += 1
+                generated.append(
+                    IzlyTransaction(
+                        id: "demo-\(identifier)",
+                        date: shortDate(day),
+                        label: "Virement reçu",
+                        amount: amount,
+                        group: 2,
+                        timestamp: timestamp(of: day, hour: 20, minute: 10)
+                    )
+                )
+            }
+
+            // Recharge quand le solde descend, ou tous les 30 jours.
+            if balance < 8 || dayOffset % 30 == 0 {
+                let amount = 30.0
+                balance += amount
+                identifier += 1
+                generated.append(
+                    IzlyTransaction(
+                        id: "demo-\(identifier)",
+                        date: shortDate(day),
+                        label: "Rechargement par carte",
+                        amount: amount,
+                        group: 1,
+                        timestamp: timestamp(of: day, hour: 18, minute: 20)
+                    )
+                )
+            }
+        }
+
+        return (balance, generated.reversed())
     }
 
-    static let transactions: [IzlyTransaction] = [
-        // Aujourd'hui
-        IzlyTransaction(id: "demo-1", date: "Aujourd'hui", label: "Resto U — Crous Jussieu", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 0, hour: 12, minute: 34)),
-        IzlyTransaction(id: "demo-2", date: "Aujourd'hui", label: "Cafétéria — Crous Jussieu", amount: -1.10, group: 0, timestamp: timestamp(daysAgo: 0, hour: 9, minute: 12)),
-        // Cette semaine
-        IzlyTransaction(id: "demo-3", date: "Hier", label: "Resto U — Crous Mabillon", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 1, hour: 12, minute: 21)),
-        IzlyTransaction(id: "demo-4", date: "Hier", label: "Rechargement par carte", amount: 20.00, group: 1, timestamp: timestamp(daysAgo: 2, hour: 18, minute: 45)),
-        IzlyTransaction(id: "demo-5", date: "Lundi", label: "Resto U — Crous Jussieu", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 4, hour: 12, minute: 40)),
-        IzlyTransaction(id: "demo-6", date: "Lundi", label: "Virement reçu", amount: 10.00, group: 2, timestamp: timestamp(daysAgo: 4, hour: 20, minute: 3)),
-        IzlyTransaction(id: "demo-7", date: "Vendredi", label: "Boulangerie du campus", amount: -2.40, group: 0, timestamp: timestamp(daysAgo: 6, hour: 8, minute: 27)),
-        // Ce mois-ci
-        IzlyTransaction(id: "demo-8", date: "Jeudi", label: "Resto U — Crous Censier", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 9, hour: 12, minute: 15)),
-        IzlyTransaction(id: "demo-9", date: "Lundi", label: "Cafétéria — Crous Jussieu", amount: -1.10, group: 0, timestamp: timestamp(daysAgo: 12, hour: 10, minute: 4)),
-        IzlyTransaction(id: "demo-10", date: "Lundi", label: "Resto U — Crous Jussieu", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 16, hour: 12, minute: 28)),
-        IzlyTransaction(id: "demo-11", date: "Mercredi", label: "Rechargement par carte", amount: 30.00, group: 1, timestamp: timestamp(daysAgo: 21, hour: 19, minute: 2)),
-        IzlyTransaction(id: "demo-12", date: "Vendredi", label: "Resto U — Crous Mabillon", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 26, hour: 12, minute: 9)),
-        // Le mois dernier
-        IzlyTransaction(id: "demo-13", date: "Octobre", label: "Resto U — Crous Jussieu", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 34, hour: 12, minute: 33)),
-        IzlyTransaction(id: "demo-14", date: "Octobre", label: "Rechargement par carte", amount: 20.00, group: 1, timestamp: timestamp(daysAgo: 45, hour: 17, minute: 51)),
-        IzlyTransaction(id: "demo-15", date: "Septembre", label: "Resto U — Crous Jussieu", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 58, hour: 12, minute: 22)),
-        IzlyTransaction(id: "demo-16", date: "Septembre", label: "Virement reçu", amount: 15.00, group: 2, timestamp: timestamp(daysAgo: 75, hour: 21, minute: 10)),
-        IzlyTransaction(id: "demo-17", date: "Août", label: "Resto U — Crous Censier", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 96, hour: 12, minute: 5)),
-        IzlyTransaction(id: "demo-18", date: "Juillet", label: "Rechargement par carte", amount: 50.00, group: 1, timestamp: timestamp(daysAgo: 120, hour: 18, minute: 30)),
-        IzlyTransaction(id: "demo-19", date: "Juin", label: "Resto U — Crous Jussieu", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 150, hour: 12, minute: 18)),
-        IzlyTransaction(id: "demo-20", date: "Mai", label: "Resto U — Crous Mabillon", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 180, hour: 12, minute: 44)),
-        IzlyTransaction(id: "demo-21", date: "Mars", label: "Rechargement par carte", amount: 30.00, group: 1, timestamp: timestamp(daysAgo: 240, hour: 19, minute: 15)),
-        IzlyTransaction(id: "demo-22", date: "Janvier", label: "Resto U — Crous Jussieu", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 300, hour: 12, minute: 30)),
-        IzlyTransaction(id: "demo-23", date: "Décembre", label: "Resto U — Crous Censier", amount: -3.30, group: 0, timestamp: timestamp(daysAgo: 340, hour: 12, minute: 12))
-    ]
+    private static func shortDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.dateFormat = "dd/MM"
+        return formatter.string(from: date)
+    }
+
+    private static func timestamp(of date: Date, hour: Int, minute: Int) -> Double {
+        let calendar = Calendar.current
+        let composed = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: date) ?? date
+        return composed.timeIntervalSince1970 * 1000
+    }
 
     // MARK: - Crous
 
