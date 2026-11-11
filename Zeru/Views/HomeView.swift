@@ -58,18 +58,30 @@ struct HomeView: View {
         filteredTransactions.filter { $0.amount < 0 }.count
     }
 
-    private var heroCaption: String {
+    /// Ligne d'info sous le solde : statut boursier + estimation en temps réel,
+    /// ou détail de la transaction quand on explore le graphe.
+    @ViewBuilder
+    private var heroCaption: some View {
         if let selectedPoint, let transaction = selectedPoint.transaction {
-            return "\(transaction.amount.signedEuroFormatted) · \(transaction.label)"
+            Text("\(transaction.amount.signedEuroFormatted) · \(transaction.label)")
+                .foregroundStyle(transaction.amount >= 0 ? .green : .red)
+        } else {
+            HStack(spacing: 5) {
+                if let status = authVM.tariffStatusLabel {
+                    Circle()
+                        .fill(authVM.isBoursier ? Color.accentColor : Color.secondary.opacity(0.5))
+                        .frame(width: 5, height: 5)
+                    Text(status)
+                        .fontWeight(.medium)
+                        .foregroundStyle(authVM.isBoursier ? Color.accentColor : .secondary)
+                    Text("·")
+                        .foregroundStyle(.tertiary)
+                }
+                Text("\(mealsRemaining) repas au RU · \(authVM.mealPrice.euroFormatted) le repas")
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+            }
         }
-        let meals = "\(mealsRemaining) repas au RU"
-        let price = "\(authVM.mealPrice.euroFormatted) le repas"
-        return authVM.isBoursier ? "Boursier · \(meals) · \(price)" : "\(meals) · \(price)"
-    }
-
-    private var captionColor: Color {
-        guard let transaction = selectedPoint?.transaction else { return .secondary }
-        return transaction.amount >= 0 ? .green : .red
     }
 
     private func buildLineData() -> [BalancePoint] {
@@ -232,15 +244,13 @@ struct HomeView: View {
                 .contentTransition(.numericText())
                 .animation(.snappy(duration: 0.12), value: selectedPoint?.id)
 
-            Text(heroCaption)
+            heroCaption
                 .font(.caption)
-                .foregroundStyle(captionColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
-                .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.2), value: heroCaption)
+                .animation(.snappy(duration: 0.2), value: authVM.tariffStatusLabel)
                 .animation(.snappy(duration: 0.12), value: selectedPoint?.id)
-                .animation(.snappy(duration: 0.2), value: authVM.mealPrice)
+                .animation(.snappy(duration: 0.2), value: mealsRemaining)
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)

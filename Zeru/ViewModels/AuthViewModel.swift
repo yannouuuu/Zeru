@@ -26,11 +26,14 @@ class AuthViewModel: ObservableObject {
 
     // MARK: - Tarif / repas
 
-    /// `true` si le compte est un étudiant boursier (repas à 1 €).
+    /// `true` si le compte est un étudiant boursier.
     var isBoursier: Bool { tariff?.isBoursier ?? false }
 
-    /// Prix d'un repas au RU pour ce compte (1 € boursier, 3,30 € sinon).
-    var mealPrice: Double { tariff?.mealPrice ?? IzlyTariff.standardMealPrice }
+    /// Statut affiché sous le solde (« Boursier » / « Non boursier »).
+    var tariffStatusLabel: String? { tariff?.statusLabel }
+
+    /// Prix d'un repas au RU (1 € pour tous les étudiants depuis mai 2026).
+    var mealPrice: Double { tariff?.mealPrice ?? IzlyTariff.studentMealPrice }
 
     // MARK: - Autres
     @Published var profileImage: UIImage? = nil
