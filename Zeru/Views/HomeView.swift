@@ -16,6 +16,11 @@ struct HomeView: View {
     @State private var cachedLineData: [BalancePoint] = []
     private let haptic = UIImpactFeedbackGenerator(style: .light)
 
+    private var fullName: String {
+        "\(authVM.profile?.firstName ?? "") \(authVM.profile?.lastName ?? "")"
+            .trimmingCharacters(in: .whitespaces)
+    }
+
     private var initials: String {
         let f = authVM.profile?.firstName.prefix(1) ?? "?"
         let l = authVM.profile?.lastName.prefix(1) ?? ""
@@ -106,28 +111,40 @@ struct HomeView: View {
                 .padding(.bottom, 32)
             }
             .scrollIndicators(.hidden)
-            .navigationTitle("Accueil")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Image("IconPreviewClassic")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 28, height: 28)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                        )
+                        .accessibilityHidden(true)
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showProfile = true
                     } label: {
-                        if let image = authVM.profileImage {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 34, height: 34)
-                                .clipShape(.circle)
-                                .glassEffect(.regular, in: .circle)
-                        } else {
-                            Text(initials)
-                                .font(.system(size: 14, weight: .semibold))
-                                .frame(width: 34, height: 34)
-                                .glassEffect(.regular, in: .circle)
+                        HStack(spacing: 8) {
+                            Text(fullName)
+                                .font(.subheadline.weight(.medium))
+                                .lineLimit(1)
+
+                            avatar
                         }
+                        .padding(.leading, 14)
+                        .padding(.trailing, 4)
+                        .padding(.vertical, 4)
+                        .glassEffect(.regular, in: .capsule)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Profil de \(fullName)")
                 }
             }
             .sheet(isPresented: $showProfile) {
@@ -150,6 +167,22 @@ struct HomeView: View {
                 selectedPoint = nil
             }
         }
+    }
+
+    private var avatar: some View {
+        Group {
+            if let image = authVM.profileImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Text(initials)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.primary)
+            }
+        }
+        .frame(width: 26, height: 26)
+        .clipShape(.circle)
     }
 
     // MARK: - Le solde
