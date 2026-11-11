@@ -142,12 +142,10 @@ struct HomeView: View {
                         .padding(.leading, 14)
                         .padding(.trailing, 4)
                         .padding(.vertical, 4)
-                        .glassEffect(.regular, in: .capsule)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Profil de \(fullName)")
                 }
-                .sharedBackgroundVisibility(.hidden)
             }
             .sheet(isPresented: $showProfile) {
                 ProfileSheetView(authVM: authVM)
