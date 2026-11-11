@@ -237,7 +237,7 @@ actor IzlyService {
     }
 
     // MARK: - Transactions réelles
-    func fetchOperations(identification: IzlyIdentification, group: Int, limit: Int = 30) async throws -> [IzlyTransaction] {
+    func fetchOperations(identification: IzlyIdentification, group: Int, limit: Int = 100) async throws -> [IzlyTransaction] {
         let urlStr = "\(REST_BASE)GetHomePageOperations?transactionGroup=\(group)&top=\(limit)"
         let url    = URL(string: urlStr)!
 

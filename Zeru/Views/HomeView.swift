@@ -63,46 +63,26 @@ struct HomeView: View {
         let filtered = filteredTransactions.sorted { $0.timestamp < $1.timestamp }
         guard !filtered.isEmpty else { return [] }
 
-        let periodSum = filtered.reduce(0.0) { $0 + $1.amount }
-        var running = max(0, authVM.balance - periodSum)
-
+        // On part du solde actuel et on remonte le temps : chaque point est le
+        // solde juste avant l'opération. Le dernier point est donc exactement
+        // le solde affiché, ce qui évite tout décalage en fin de courbe.
         var points: [BalancePoint] = [
-            BalancePoint(
-                index: 0,
-                date: formatPointDate(cutoffDate),
-                balance: running,
-                transaction: nil
-            )
+            BalancePoint(date: Date(), balance: authVM.balance, transaction: nil)
         ]
 
-        for (index, transaction) in filtered.enumerated() {
-            running = max(0, running + transaction.amount)
+        var running = authVM.balance
+        for transaction in filtered.reversed() {
+            running -= transaction.amount
             points.append(
                 BalancePoint(
-                    index: index + 1,
-                    date: transaction.date,
+                    date: Date(timeIntervalSince1970: transaction.timestamp / 1000),
                     balance: running,
                     transaction: transaction
                 )
             )
         }
 
-        points.append(
-            BalancePoint(
-                index: points.count,
-                date: "Maintenant",
-                balance: authVM.balance,
-                transaction: nil
-            )
-        )
-        return points
-    }
-
-    private func formatPointDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "fr_FR")
-        formatter.dateFormat = "dd/MM/yyyy"
-        return formatter.string(from: date)
+        return points.reversed()
     }
 
     // MARK: - Corps
@@ -185,7 +165,6 @@ struct HomeView: View {
                     .font(.system(size: 62, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.15), value: selectedPoint?.index)
                     .animation(.snappy, value: authVM.balance)
 
                 if selectedPoint == nil {
@@ -214,7 +193,7 @@ struct HomeView: View {
         if cachedLineData.count >= 2 {
             Chart(cachedLineData) { point in
                 AreaMark(
-                    x: .value("Index", point.index),
+                    x: .value("Date", point.date),
                     y: .value("Solde", point.balance)
                 )
                 .foregroundStyle(
@@ -224,24 +203,15 @@ struct HomeView: View {
                         endPoint: .bottom
                     )
                 )
-                .interpolationMethod(.catmullRom)
+                .interpolationMethod(.monotone)
 
                 LineMark(
-                    x: .value("Index", point.index),
+                    x: .value("Date", point.date),
                     y: .value("Solde", point.balance)
                 )
                 .foregroundStyle(Color.accentColor)
                 .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                .interpolationMethod(.catmullRom)
-
-                if let selected = selectedPoint, selected.index == point.index {
-                    PointMark(
-                        x: .value("Index", point.index),
-                        y: .value("Solde", point.balance)
-                    )
-                    .symbolSize(80)
-                    .foregroundStyle(Color.accentColor)
-                }
+                .interpolationMethod(.monotone)
             }
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
@@ -249,32 +219,48 @@ struct HomeView: View {
             .padding(.top, 10)
             .chartOverlay { proxy in
                 GeometryReader { geometry in
-                    Rectangle()
-                        .fill(.clear)
-                        .contentShape(Rectangle())
-                        .gesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { value in
-                                    guard let plotFrame = proxy.plotFrame else { return }
-                                    let origin = geometry[plotFrame].origin.x
-                                    let width = geometry[plotFrame].width
-                                    guard width > 0 else { return }
-                                    let ratio = max(0, min(1, (value.location.x - origin) / width))
-                                    let index = Int((ratio * CGFloat(cachedLineData.count - 1)).rounded())
-                                    let point = cachedLineData[max(0, min(cachedLineData.count - 1, index))]
-                                    if selectedPoint?.index != point.index {
-                                        haptic.impactOccurred()
-                                        withAnimation(.snappy(duration: 0.12)) {
-                                            selectedPoint = point
-                                        }
-                                    }
+                    let plotFrame = proxy.plotFrame.map { geometry[$0] } ?? .zero
+
+                    ZStack(alignment: .topLeading) {
+                        if let selected = selectedPoint,
+                           let x = proxy.position(forX: selected.date),
+                           let y = proxy.position(forY: selected.balance) {
+                            Path { path in
+                                path.move(to: CGPoint(x: x, y: plotFrame.minY))
+                                path.addLine(to: CGPoint(x: x, y: plotFrame.maxY))
+                            }
+                            .stroke(
+                                Color.secondary.opacity(0.35),
+                                style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+                            )
+
+                            Circle()
+                                .fill(Color.accentColor)
+                                .frame(width: 9, height: 9)
+                                .position(x: x, y: y)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                guard let frame = proxy.plotFrame else { return }
+                                let x = value.location.x - geometry[frame].origin.x
+                                guard let date = proxy.value(atX: x, as: Date.self),
+                                      let nearest = cachedLineData.min(by: {
+                                          abs($0.date.timeIntervalSince(date)) <
+                                          abs($1.date.timeIntervalSince(date))
+                                      }) else { return }
+
+                                if selectedPoint?.id != nearest.id {
+                                    selectedPoint = nearest
+                                    haptic.impactOccurred()
                                 }
-                                .onEnded { _ in
-                                    withAnimation(.snappy) {
-                                        selectedPoint = nil
-                                    }
-                                }
-                        )
+                            }
+                            .onEnded { _ in
+                                selectedPoint = nil
+                            }
+                    )
                 }
             }
         } else {
@@ -339,9 +325,9 @@ struct TransactionHistorySection: View {
     var filtered: [IzlyTransaction] {
         switch filter {
         case .all:      return transactions
-        case .payment:  return transactions.filter { $0.group == 2 }
-        case .topup:    return transactions.filter { $0.group == 0 }
-        case .transfer: return transactions.filter { $0.group == 1 }
+        case .payment:  return transactions.filter { $0.group == 0 }
+        case .topup:    return transactions.filter { $0.group == 1 }
+        case .transfer: return transactions.filter { $0.group == 2 }
         }
     }
 
@@ -448,8 +434,7 @@ struct TransactionRow: View {
 // ── Modèles ────────────────────────────────────────────
 struct BalancePoint: Identifiable {
     let id          = UUID()
-    let index:       Int
-    let date:        String
+    let date:        Date
     let balance:     Double
     let transaction: IzlyTransaction?
 }
