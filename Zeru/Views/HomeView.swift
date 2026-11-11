@@ -221,16 +221,92 @@ struct HomeView: View {
 
     // MARK: - Le graphe
 
+    private var yDomain: ClosedRange<Double> {
+        let balances = cachedLineData.map(\.balance)
+        let lowest = balances.min() ?? 0
+        let highest = balances.max() ?? 1
+        let padding = max(0.5, (highest - lowest) * 0.18)
+        return (lowest - padding)...(highest + padding)
+    }
+
     @ViewBuilder
     private var chartSection: some View {
         if cachedLineData.count >= 2 {
-            BalanceChartView(
-                points: cachedLineData,
-                accent: .accentColor,
-                selected: $selectedPoint
-            )
+            Chart(cachedLineData) { point in
+                AreaMark(
+                    x: .value("Date", point.date),
+                    y: .value("Solde", point.balance)
+                )
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [Color.accentColor.opacity(0.30), Color.accentColor.opacity(0.02)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .interpolationMethod(.catmullRom)
+
+                LineMark(
+                    x: .value("Date", point.date),
+                    y: .value("Solde", point.balance)
+                )
+                .foregroundStyle(Color.accentColor)
+                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .interpolationMethod(.catmullRom)
+            }
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .chartYScale(domain: yDomain)
             .frame(height: 150)
             .padding(.top, 10)
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    let plotFrame = proxy.plotFrame.map { geometry[$0] } ?? .zero
+
+                    ZStack(alignment: .topLeading) {
+                        Rectangle()
+                            .fill(.clear)
+                            .contentShape(Rectangle())
+
+                        if let selected = selectedPoint,
+                           let x = proxy.position(forX: selected.date),
+                           let y = proxy.position(forY: selected.balance) {
+                            Path { path in
+                                path.move(to: CGPoint(x: x, y: plotFrame.minY))
+                                path.addLine(to: CGPoint(x: x, y: plotFrame.maxY))
+                            }
+                            .stroke(
+                                Color.secondary.opacity(0.35),
+                                style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+                            )
+
+                            Circle()
+                                .fill(Color.accentColor)
+                                .frame(width: 9, height: 9)
+                                .position(x: x, y: y)
+                        }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                guard let frame = proxy.plotFrame else { return }
+                                let x = value.location.x - geometry[frame].origin.x
+                                guard let date = proxy.value(atX: x, as: Date.self) else { return }
+                                let nearest = cachedLineData.min(by: {
+                                    abs($0.date.timeIntervalSince(date)) <
+                                    abs($1.date.timeIntervalSince(date))
+                                })
+                                if let nearest, selectedPoint?.id != nearest.id {
+                                    selectedPoint = nearest
+                                    haptic.impactOccurred()
+                                }
+                            }
+                            .onEnded { _ in
+                                selectedPoint = nil
+                            }
+                    )
+                }
+            }
         } else {
             Text("Pas encore de données sur cette période")
                 .font(.caption)
@@ -447,199 +523,3 @@ enum TransactionFilter: String, CaseIterable {
 }
 
 
-// MARK: - Graphe du solde
-
-/// Un graphe dessiné à la main : l'aire remplit toute la hauteur,
-/// la courbe est lissée et le drag suit le doigt sans animation.
-private struct BalanceChartView: View {
-    let points: [BalancePoint]
-    let accent: Color
-    @Binding var selected: BalancePoint?
-
-    var body: some View {
-        GeometryReader { geometry in
-            BalanceChartContent(
-                points: points,
-                accent: accent,
-                selected: $selected,
-                size: geometry.size
-            )
-        }
-    }
-}
-
-private struct BalanceChartContent: View {
-    let points: [BalancePoint]
-    let accent: Color
-    @Binding var selected: BalancePoint?
-    let size: CGSize
-
-    private let haptic = UISelectionFeedbackGenerator()
-
-    private var width: CGFloat { size.width }
-    private var height: CGFloat { size.height }
-
-    private var minBalance: Double { points.map(\.balance).min() ?? 0 }
-    private var maxBalance: Double { points.map(\.balance).max() ?? 1 }
-    private var range: Double { max(0.01, maxBalance - minBalance) }
-
-    private var startDate: Date { points.first?.date ?? Date() }
-    private var endDate: Date { points.last?.date ?? Date() }
-    private var timeRange: TimeInterval { max(1, endDate.timeIntervalSince(startDate)) }
-
-    private var topInset: CGFloat { height * 0.10 }
-    private var bottomInset: CGFloat { height * 0.06 }
-    private var plotHeight: CGFloat { max(1, height - topInset - bottomInset) }
-
-    private func x(for date: Date) -> CGFloat {
-        CGFloat(date.timeIntervalSince(startDate) / timeRange) * width
-    }
-
-    private func y(for balance: Double) -> CGFloat {
-        topInset + plotHeight * CGFloat(1 - (balance - minBalance) / range)
-    }
-
-    private var cgPoints: [CGPoint] {
-        smoothed(points.map { CGPoint(x: x(for: $0.date), y: y(for: $0.balance)) })
-    }
-
-    /// Lissage façon Lenis : chaque point glisse légèrement vers ses voisins
-    /// pour adoucir les ruptures de pente. Les extrémités restent exactes,
-    /// donc la courbe finit toujours sur le solde courant.
-    private func smoothed(_ raw: [CGPoint]) -> [CGPoint] {
-        guard raw.count > 2 else { return raw }
-
-        var result = raw
-        for _ in 0..<2 {
-            var next = result
-            for index in 1..<result.count - 1 {
-                next[index].y = result[index - 1].y * 0.25
-                    + result[index].y * 0.5
-                    + result[index + 1].y * 0.25
-            }
-            result = next
-        }
-        return result
-    }
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            smoothPath(cgPoints, closingTo: height)
-                .fill(
-                    LinearGradient(
-                        colors: [accent.opacity(0.32), accent.opacity(0.02)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-
-            smoothPath(cgPoints)
-                .stroke(
-                    accent,
-                    style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
-                )
-
-            if let selected {
-                let px = x(for: selected.date)
-                let py = y(for: selected.balance)
-
-                Path { path in
-                    path.move(to: CGPoint(x: px, y: 0))
-                    path.addLine(to: CGPoint(x: px, y: height))
-                }
-                .stroke(
-                    Color.secondary.opacity(0.35),
-                    style: StrokeStyle(lineWidth: 1, dash: [3, 3])
-                )
-
-                Circle()
-                    .fill(accent)
-                    .frame(width: 9, height: 9)
-                    .position(x: px, y: py)
-            }
-        }
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    let px = max(0, min(width, value.location.x))
-                    let nearest = points.min(by: {
-                        abs(x(for: $0.date) - px) < abs(x(for: $1.date) - px)
-                    })
-                    if let nearest, selected?.id != nearest.id {
-                        selected = nearest
-                        haptic.selectionChanged()
-                    }
-                }
-                .onEnded { _ in
-                    selected = nil
-                }
-        )
-    }
-
-    /// Courbe lissée par tangentes monotones (Fritsch–Carlson) : elle passe
-    /// exactement par les points et ne dépasse jamais entre deux, ce qui donne
-    /// un tracé naturel pour des données de solde.
-    private func smoothPath(_ points: [CGPoint], closingTo bottom: CGFloat? = nil) -> Path {
-        var path = Path()
-        guard points.count > 1 else { return path }
-
-        if let bottom {
-            path.move(to: CGPoint(x: points[0].x, y: bottom))
-            path.addLine(to: points[0])
-        } else {
-            path.move(to: points[0])
-        }
-
-        let count = points.count
-
-        // Pentes entre points consécutifs.
-        var secants = [CGFloat](repeating: 0, count: count - 1)
-        for index in 0..<count - 1 {
-            let dx = points[index + 1].x - points[index].x
-            secants[index] = dx == 0 ? 0 : (points[index + 1].y - points[index].y) / dx
-        }
-
-        // Tangentes initiales (moyenne des pentes voisines).
-        var tangents = [CGFloat](repeating: 0, count: count)
-        tangents[0] = secants[0]
-        tangents[count - 1] = secants[count - 2]
-        for index in 1..<count - 1 {
-            tangents[index] = (secants[index - 1] + secants[index]) / 2
-        }
-
-        // Filtre de monotonie : on borne les tangentes pour éviter tout
-        // dépassement de la courbe au-dessus ou en dessous des points.
-        for index in 0..<count - 1 where secants[index] != 0 {
-            let alpha = tangents[index] / secants[index]
-            let beta = tangents[index + 1] / secants[index]
-            let magnitude = alpha * alpha + beta * beta
-
-            if magnitude > 9 {
-                let scale = 3 / sqrt(magnitude)
-                tangents[index] = scale * alpha * secants[index]
-                tangents[index + 1] = scale * beta * secants[index]
-            }
-        }
-
-        for index in 0..<count - 1 {
-            let dx = points[index + 1].x - points[index].x
-            let control1 = CGPoint(
-                x: points[index].x + dx / 3,
-                y: points[index].y + tangents[index] * dx / 3
-            )
-            let control2 = CGPoint(
-                x: points[index + 1].x - dx / 3,
-                y: points[index + 1].y - tangents[index + 1] * dx / 3
-            )
-            path.addCurve(to: points[index + 1], control1: control1, control2: control2)
-        }
-
-        if let bottom {
-            path.addLine(to: CGPoint(x: points[count - 1].x, y: bottom))
-            path.closeSubpath()
-        }
-
-        return path
-    }
-}
