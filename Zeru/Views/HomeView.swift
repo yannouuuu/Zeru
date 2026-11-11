@@ -468,6 +468,9 @@ struct TransactionHistorySection: View {
                                 Text(f.label)
                                     .font(.subheadline)
                                     .fontWeight(filter == f ? .semibold : .regular)
+                                    // Le gras doit suivre le tap immédiatement, sans attendre
+                                    // la fin de l'animation de la capsule.
+                                    .animation(nil, value: filter)
                             }
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
