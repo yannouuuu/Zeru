@@ -126,6 +126,7 @@ struct HomeView: View {
                         )
                         .accessibilityHidden(true)
                 }
+                .sharedBackgroundVisibility(.hidden)
 
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
