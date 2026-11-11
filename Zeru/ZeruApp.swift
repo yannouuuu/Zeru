@@ -16,17 +16,7 @@ struct ZeruApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                #if DEBUG
-                if let idea = LoginIdeaDebug.selectedIdea {
-                    LoginIdeaDebugHost(idea: idea)
-                } else {
-                    ContentView()
-                }
-                #else
-                ContentView()
-                #endif
-            }
+            ContentView()
                 // ".tint()" global = toute l'app hérite de cette couleur
                 // Boutons, icônes tab bar, liens, sliders... tout change
                 .tint(settings.accentColor)
