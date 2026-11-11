@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var selectedPeriod: Period = .month
     @State private var showProfile = false
     @State private var selectedPoint: BalancePoint?
+    @State private var crosshair: CGPoint?
     @State private var cachedLineData: [BalancePoint] = []
     private let haptic = UIImpactFeedbackGenerator(style: .light)
 
@@ -221,14 +222,12 @@ struct HomeView: View {
             Text(selectedPoint?.date ?? "Solde disponible")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .animation(.interactiveSpring(duration: 0.1), value: selectedPoint?.index)
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(selectedPoint?.balance.euroFormatted ?? authVM.balance.euroFormatted)
                     .font(.system(size: 62, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                    .animation(.interactiveSpring(duration: 0.1), value: selectedPoint?.index)
 
                 if selectedPoint == nil {
                     Text("\(mealsRemaining) repas")
@@ -250,6 +249,43 @@ struct HomeView: View {
     }
 
     // MARK: - Le graphe
+
+    private func screenPoints(proxy: ChartProxy) -> [CGPoint] {
+        cachedLineData.compactMap { point in
+            guard let x = proxy.position(forX: point.index),
+                  let y = proxy.position(forY: point.balance) else { return nil }
+            return CGPoint(x: x, y: y)
+        }
+    }
+
+    /// Évalue la courbe (Catmull-Rom) à une abscisse donnée, en coordonnées écran.
+    private func curveY(at x: CGFloat, points: [CGPoint]) -> CGFloat? {
+        guard points.count > 1 else { return nil }
+
+        let clampedX = max(points[0].x, min(points[points.count - 1].x, x))
+
+        var segment = 0
+        while segment < points.count - 2 && points[segment + 1].x < clampedX {
+            segment += 1
+        }
+
+        let p0 = points[max(0, segment - 1)]
+        let p1 = points[segment]
+        let p2 = points[segment + 1]
+        let p3 = points[min(points.count - 1, segment + 2)]
+
+        let dx = p2.x - p1.x
+        let t = dx == 0 ? 0 : (clampedX - p1.x) / dx
+        let t2 = t * t
+        let t3 = t2 * t
+
+        return 0.5 * (
+            2 * p1.y
+            + (-p0.y + p2.y) * t
+            + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2
+            + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
+        )
+    }
 
     @ViewBuilder
     private var chartSection: some View {
@@ -275,15 +311,6 @@ struct HomeView: View {
                 .foregroundStyle(Color.accentColor)
                 .lineStyle(StrokeStyle(lineWidth: 2))
                 .interpolationMethod(.catmullRom)
-
-                if let selected = selectedPoint, selected.index == point.index {
-                    PointMark(
-                        x: .value("Index", point.index),
-                        y: .value("Solde", point.balance)
-                    )
-                    .symbolSize(80)
-                    .foregroundStyle(Color.accentColor)
-                }
             }
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
@@ -291,34 +318,57 @@ struct HomeView: View {
             .padding(.top, 10)
             .chartOverlay { proxy in
                 GeometryReader { geometry in
-                    Rectangle()
-                        .fill(.clear)
-                        .contentShape(Rectangle())
-                        .gesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { value in
-                                    guard let frame = proxy.plotFrame else { return }
-                                    let plot = geometry[frame]
-                                    guard plot.width > 0 else { return }
+                    let plot = proxy.plotFrame.map { geometry[$0] } ?? .zero
 
-                                    let ratio = max(0, min(1, (value.location.x - plot.origin.x) / plot.width))
-                                    let index = Int((ratio * CGFloat(cachedLineData.count - 1)).rounded())
-                                    let clamped = max(0, min(cachedLineData.count - 1, index))
-                                    let point = cachedLineData[clamped]
+                    ZStack(alignment: .topLeading) {
+                        Rectangle()
+                            .fill(.clear)
+                            .contentShape(Rectangle())
 
-                                    if selectedPoint?.index != point.index {
-                                        haptic.impactOccurred()
-                                        withAnimation(.interactiveSpring(duration: 0.1)) {
-                                            selectedPoint = point
-                                        }
-                                    }
+                        if let crosshair {
+                            Path { path in
+                                path.move(to: CGPoint(x: crosshair.x, y: plot.minY))
+                                path.addLine(to: CGPoint(x: crosshair.x, y: plot.maxY))
+                            }
+                            .stroke(
+                                Color.secondary.opacity(0.35),
+                                style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+                            )
+
+                            Circle()
+                                .fill(Color.accentColor)
+                                .frame(width: 9, height: 9)
+                                .position(x: crosshair.x, y: crosshair.y)
+                        }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                guard let frame = proxy.plotFrame else { return }
+                                let plotRect = geometry[frame]
+                                guard plotRect.width > 0 else { return }
+
+                                let x = max(plotRect.minX, min(plotRect.maxX, value.location.x))
+                                let screenPoints = self.screenPoints(proxy: proxy)
+                                guard let curveY = self.curveY(at: x, points: screenPoints) else { return }
+
+                                crosshair = CGPoint(x: x, y: curveY)
+
+                                let ratio = (x - plotRect.minX) / plotRect.width
+                                let index = Int((ratio * CGFloat(cachedLineData.count - 1)).rounded())
+                                let clamped = max(0, min(cachedLineData.count - 1, index))
+                                let point = cachedLineData[clamped]
+
+                                if selectedPoint?.index != point.index {
+                                    haptic.impactOccurred()
+                                    selectedPoint = point
                                 }
-                                .onEnded { _ in
-                                    withAnimation(.spring(duration: 0.3)) {
-                                        selectedPoint = nil
-                                    }
-                                }
-                        )
+                            }
+                            .onEnded { _ in
+                                crosshair = nil
+                                selectedPoint = nil
+                            }
+                    )
                 }
             }
         } else {
