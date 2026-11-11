@@ -21,13 +21,45 @@ class AuthViewModel: ObservableObject {
     @Published var identification: IzlyIdentification?
     @Published var balance:        Double = 0.0
     @Published var transactions:   [IzlyTransaction] = []
-    
+    /// Tarif CROUS du compte (boursier ou non), chargé avec le solde.
+    @Published var tariff:         IzlyTariff?
+
+    // MARK: - Tarif / repas
+
+    /// `true` si le compte est un étudiant boursier.
+    var isBoursier: Bool { tariff?.isBoursier ?? false }
+
+    /// Statut affiché sous le solde (« Boursier » / « Non boursier »).
+    var tariffStatusLabel: String? { tariff?.statusLabel }
+
+    /// Prix d'un repas au RU (1 € pour tous les étudiants depuis mai 2026).
+    var mealPrice: Double { tariff?.mealPrice ?? IzlyTariff.studentMealPrice }
+
     // MARK: - Autres
     @Published var profileImage: UIImage? = nil
 
 
     private let service         = IzlyService()
     private var pendingPassword: String? = nil
+
+    private static let tariffCacheKey = "izly.cachedTariff"
+
+    private static func loadCachedTariff() -> IzlyTariff? {
+        guard let data = UserDefaults.standard.data(forKey: tariffCacheKey),
+              let tariff = try? JSONDecoder().decode(IzlyTariff.self, from: data) else {
+            return nil
+        }
+        return tariff
+    }
+
+    private func cacheTariff(_ tariff: IzlyTariff) {
+        guard let data = try? JSONEncoder().encode(tariff) else { return }
+        UserDefaults.standard.set(data, forKey: Self.tariffCacheKey)
+    }
+
+    private static func clearCachedTariff() {
+        UserDefaults.standard.removeObject(forKey: tariffCacheKey)
+    }
     
     func updateProfileImage(_ image: UIImage) {
         profileImage = image
@@ -36,14 +68,38 @@ class AuthViewModel: ObservableObject {
 
     // MARK: - Init
     init() {
+        if DemoMode.isActive {
+            profile        = DemoData.profile
+            identification = DemoData.identification
+            balance        = DemoData.balance
+            transactions   = DemoData.transactions
+            tariff         = DemoData.tariff
+            _step = Published(initialValue: .home)
+            return
+        }
+
         if let saved = KeychainService.loadIdentification() {
             identification = saved
             profile = KeychainService.loadProfile()
             profileImage   = ProfileImageService.load()
+            tariff         = Self.loadCachedTariff()
             _step = Published(initialValue: .home)
         } else {
             _step = Published(initialValue: .login)
         }
+    }
+
+    // MARK: - Démonstration
+
+    /// Entre dans le compte de démonstration (aucun identifiant requis).
+    func enterDemoMode() {
+        DemoMode.enable()
+        profile        = DemoData.profile
+        identification = DemoData.identification
+        balance        = DemoData.balance
+        transactions   = DemoData.transactions
+        tariff         = DemoData.tariff
+        step           = .home
     }
 
     // MARK: - Étape 1 : Login
@@ -109,6 +165,8 @@ class AuthViewModel: ObservableObject {
 
     // MARK: - Charger solde + transactions
     func loadTransactions() async {
+        if DemoMode.isActive { return }
+
         guard var identification = identification else { return }
 
         do {
@@ -139,6 +197,7 @@ class AuthViewModel: ObservableObject {
         async let paymentsFetch  = service.fetchOperations(identification: identification, group: 0)
         async let topupFetch     = service.fetchOperations(identification: identification, group: 1)
         async let transfersFetch = service.fetchOperations(identification: identification, group: 2)
+        async let tariffFetch    = service.fetchTariff(identification: identification)
 
         let (newBalance, payments, topup, transfers) = try await (
             balanceFetch,
@@ -157,10 +216,29 @@ class AuthViewModel: ObservableObject {
             balance: newBalance,
             isInitialLoad: isInitialLoad
         )
+
+        // Le tarif CROUS n'est pas bloquant : si l'appel échoue, on garde le tarif connu.
+        if let newTariff = try? await tariffFetch {
+            tariff = newTariff
+            cacheTariff(newTariff)
+        }
     }
 
     // MARK: - Déconnexion
     func logout() {
+        Self.clearCachedTariff()
+
+        if DemoMode.isActive {
+            DemoMode.disable()
+            identification = nil
+            profile        = nil
+            balance        = 0.0
+            transactions   = []
+            tariff         = nil
+            step           = .login
+            return
+        }
+
         KeychainService.deleteIdentification()
         KeychainService.deletePassword()
         KeychainService.deleteProfile()
@@ -170,6 +248,7 @@ class AuthViewModel: ObservableObject {
         profile        = nil
         balance        = 0.0
         transactions   = []
+        tariff         = nil
         step           = .login
     }
 }

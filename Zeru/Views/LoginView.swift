@@ -55,6 +55,12 @@ struct LoginView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 18)
 
+                SecondaryCapsuleButton(title: "Découvrir la démo", systemImage: "sparkles") {
+                    authVM.enterDemoMode()
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 10)
+
                 Spacer()
 
                 footer

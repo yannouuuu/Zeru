@@ -1,36 +1,38 @@
+//
+//  AppIconPickerView.swift
+//  Zeru
+//
+//  Icône de l'app : une grille de tirages, une sélection, rien d'autre.
+//
+
 import SwiftUI
 
 struct AppIconPickerView: View {
     @Environment(AppSettings.self) private var settings
+
     @State private var isApplying = false
     @State private var errorMessage: String?
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 100), spacing: 16)
-    ]
+    private let columns = [GridItem(.adaptive(minimum: 92), spacing: 16)]
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 20) {
+            LazyVGrid(columns: columns, spacing: 22) {
                 ForEach(AppIconOption.allCases) { option in
-                    IconCardView(option: option, isSelected: settings.appIconName == option.rawValue)
-                        .onTapGesture {
-                            guard !isApplying else { return }
-                            Task { await applyIcon(option, settings: settings) }
-                        }
+                    iconCell(option)
                 }
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.vertical, 24)
         }
+        .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle("Icône de l'app")
         .navigationBarTitleDisplayMode(.inline)
-        .overlay(alignment: .bottom) {
+        .toolbar {
             if isApplying {
-                ProgressView("Mise à jour…")
-                    .padding(14)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                    .padding(.bottom, 20)
-                    .transition(.opacity.animation(.easeInOut))
+                ToolbarItem(placement: .topBarTrailing) {
+                    ProgressView()
+                }
             }
         }
         .alert("Impossible de changer l'icône", isPresented: errorBinding) {
@@ -46,6 +48,44 @@ struct AppIconPickerView: View {
         }
     }
 
+    // MARK: - Cellule
+
+    private func iconCell(_ option: AppIconOption) -> some View {
+        let isSelected = settings.appIconName == option.rawValue
+
+        return Button {
+            guard !isApplying else { return }
+            Task { await applyIcon(option) }
+        } label: {
+            VStack(spacing: 8) {
+                Image(option.previewImageName)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 76, height: 76)
+                    .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 17, style: .continuous)
+                            .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 3)
+                    }
+
+                Text(option.label)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15))
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.35))
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(option.label)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    // MARK: - Application
+
     private var errorBinding: Binding<Bool> {
         Binding {
             errorMessage != nil
@@ -55,61 +95,18 @@ struct AppIconPickerView: View {
     }
 
     @MainActor
-    private func applyIcon(_ option: AppIconOption, settings: AppSettings) async {
+    private func applyIcon(_ option: AppIconOption) async {
         isApplying = true
         defer {
             isApplying = false
-            // Toujours re-synchroniser avec l'état réel de l'OS après toute tentative
             settings.appIconName = AppIconService.shared.currentOption().rawValue
         }
 
         do {
             try await AppIconService.shared.setAppIcon(option)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-}
-
-struct IconCardView: View {
-    let option: AppIconOption
-    let isSelected: Bool
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(option.previewImageName)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 80, height: 80)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18)
-                        .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 3)
-                )
-
-            Text(option.label)
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundStyle(.primary)
-
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .font(.caption)
-                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.4))
-                .animation(.easeInOut(duration: 0.2), value: isSelected)
-        }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 8)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(isSelected ? Color.accentColor.opacity(0.08) : Color(.secondarySystemGroupedBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(isSelected ? Color.accentColor.opacity(0.4) : Color.clear, lineWidth: 1.5)
-        )
-        .scaleEffect(isSelected ? 1.03 : 1.0)
-        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isSelected)
     }
 }
